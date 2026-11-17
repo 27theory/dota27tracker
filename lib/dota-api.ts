@@ -1,6 +1,5 @@
 import "server-only";
 import { z } from "zod";
-import { analyzeImpact } from "./impact-analyzer";
 import type { Match, MatchPlayer, PlayerProfile, Role } from "./types";
 import { itemId, itemName, rankName } from "./format";
 import { demoMatch, demoProfile } from "./demo";
@@ -37,11 +36,12 @@ export class DataError extends Error {
 export async function requestJson(
   url: string,
   init?: RequestInit,
+  timeoutMs = 15000,
 ): Promise<unknown> {
   const res = await fetch(url, {
     ...init,
     cache: "no-store",
-    signal: AbortSignal.timeout(15000),
+    signal: init?.signal ?? AbortSignal.timeout(timeoutMs),
   });
   if (!res.ok)
     throw new DataError(
@@ -55,7 +55,11 @@ export async function requestJson(
   return res.json();
 }
 
-async function graphql(query: string, variables: Record<string, unknown>) {
+async function graphql(
+  query: string,
+  variables: Record<string, unknown>,
+  timeoutMs = 15000,
+) {
   if (!process.env.STRATZ_API_TOKEN)
     throw new DataError("STRATZ token missing");
   const raw = z
@@ -64,15 +68,19 @@ async function graphql(query: string, variables: Record<string, unknown>) {
       errors: z.array(z.object({ message: z.string() })).optional(),
     })
     .parse(
-      await requestJson("https://api.stratz.com/graphql", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "User-Agent": "STRATZ_API",
-          Authorization: `Bearer ${process.env.STRATZ_API_TOKEN}`,
+      await requestJson(
+        "https://api.stratz.com/graphql",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "User-Agent": "STRATZ_API",
+            Authorization: `Bearer ${process.env.STRATZ_API_TOKEN}`,
+          },
+          body: JSON.stringify({ query, variables }),
         },
-        body: JSON.stringify({ query, variables }),
-      }),
+        timeoutMs,
+      ),
     );
   if (raw.errors?.length || !raw.data)
     throw new DataError("STRATZ не вернул данные");
@@ -207,6 +215,27 @@ export function normalizeOpenDota(data: unknown): Match {
   };
 }
 
+function parseRole(pos: string | null | undefined): Role | null {
+  return /^POSITION_[1-5]$|^POS_[1-5]$/.test(pos ?? "")
+    ? (Number(pos!.slice(-1)) as Role)
+    : null;
+}
+
+function parseLane(lane: string | null | undefined): string | null {
+  return (
+    (
+      {
+        SAFE_LANE: "Легкая",
+        MID_LANE: "Мид",
+        OFF_LANE: "Сложная",
+        JUNGLE: "Лес",
+      } as Record<string, string>
+    )[lane ?? ""] ??
+    lane ??
+    null
+  );
+}
+
 const stPlayer = z.object({
   steamAccountId: maybeN,
   steamAccount: z.object({ name: z.string().nullish() }).nullish(),
@@ -260,6 +289,31 @@ const stMatch = z.object({
 
 const ST_FIELDS = `id durationSeconds startDateTime didRadiantWin gameMode rank averageRank topLaneOutcome midLaneOutcome bottomLaneOutcome radiantNetworthLeads radiantExperienceLeads players { steamAccountId steamAccount { name } heroId isRadiant position lane kills deaths assists goldPerMinute experiencePerMinute numLastHits numDenies networth heroDamage towerDamage heroHealing imp item0Id item1Id item2Id item3Id item4Id item5Id neutral0Id stats { itemPurchases { itemId time } } }`;
 
+const ST_PROFILE_MATCH_FIELDS = `id durationSeconds startDateTime didRadiantWin gameMode players(steamAccountId: $id) { steamAccountId heroId isRadiant position lane kills deaths assists goldPerMinute experiencePerMinute imp }`;
+
+const stProfilePlayer = z.object({
+  steamAccountId: maybeN,
+  heroId: n,
+  isRadiant: z.boolean(),
+  position: z.string().nullish(),
+  lane: z.string().nullish(),
+  kills: n,
+  deaths: n,
+  assists: n,
+  goldPerMinute: maybeN,
+  experiencePerMinute: maybeN,
+  imp: maybeN,
+});
+
+const stProfileMatch = z.object({
+  id: z.number(),
+  durationSeconds: n,
+  startDateTime: n,
+  didRadiantWin: z.boolean(),
+  gameMode: z.union([z.string(), z.number()]).nullish(),
+  players: z.array(stProfilePlayer),
+});
+
 export function normalizeStratz(raw: unknown): Match {
   const m = stMatch.parse(raw);
   const players: MatchPlayer[] = m.players.map((p) => ({
@@ -267,20 +321,8 @@ export function normalizeStratz(raw: unknown): Match {
     name: p.steamAccount?.name ?? "Аноним",
     heroId: p.heroId,
     team: p.isRadiant ? "radiant" : "dire",
-    role: /^POSITION_[1-5]$|^POS_[1-5]$/.test(p.position ?? "")
-      ? (Number(p.position!.slice(-1)) as Role)
-      : null,
-    lane:
-      (
-        {
-          SAFE_LANE: "Легкая",
-          MID_LANE: "Мид",
-          OFF_LANE: "Сложная",
-          JUNGLE: "Лес",
-        } as Record<string, string>
-      )[p.lane ?? ""] ??
-      p.lane ??
-      null,
+    role: parseRole(p.position),
+    lane: parseLane(p.lane),
     laneOutcome: laneOutcome(p.lane, p.isRadiant, m),
     kills: p.kills,
     deaths: p.deaths,
@@ -321,8 +363,8 @@ export function normalizeStratz(raw: unknown): Match {
       m.gameMode === "ALL_PICK_RANKED"
         ? "Рейтинговый · All Pick"
         : m.gameMode === "ALL_PICK"
-          ? "All Pick"
-          : `Режим ${m.gameMode ?? "неизвестен"}`,
+            ? "All Pick"
+            : `Режим ${m.gameMode ?? "неизвестен"}`,
     rank: rankName(m.averageRank ?? m.rank),
     players,
     goldLeads: (m.radiantNetworthLeads ?? []).slice(1),
@@ -386,7 +428,7 @@ async function openProfile(id: number): Promise<PlayerProfile> {
   const [raw, recent, wl, heroStats] = await Promise.all([
     requestJson(`https://api.opendota.com/api/players/${id}`),
     requestJson(
-      `https://api.opendota.com/api/players/${id}/matches?limit=20&${projectFields}`,
+      `https://api.opendota.com/api/players/${id}/matches?limit=50&${projectFields}`,
     ).catch(() =>
       requestJson(`https://api.opendota.com/api/players/${id}/recentMatches`),
     ),
@@ -408,7 +450,7 @@ async function openProfile(id: number): Promise<PlayerProfile> {
   const matches = z
     .array(odRecent)
     .parse(recent)
-    .slice(0, 20)
+    .slice(0, 50)
     .map((m) => ({
       id: String(m.match_id),
       heroId: m.hero_id,
@@ -451,6 +493,15 @@ async function openProfile(id: number): Promise<PlayerProfile> {
   };
 }
 
+function profileBadge(imp: number | null, won: boolean): string | undefined {
+  if (imp === null) return undefined;
+  if (imp <= -30) return "Руинер";
+  if (imp <= -15) return "Близок к руину";
+  if (!won && imp > 15) return "Тащил 1v9";
+  if (imp > 15) return "Высокий импакт";
+  return "Стабильно";
+}
+
 async function loadProfile(id: string): Promise<PlayerProfile> {
   if (id === "demo") return demoProfile();
   if (!/^\d{1,10}$/.test(id) || Number(id) <= 0 || Number(id) > 4294967295)
@@ -458,9 +509,11 @@ async function loadProfile(id: string): Promise<PlayerProfile> {
   return cached(`player:${id}`, async () => {
     if (process.env.STRATZ_API_TOKEN)
       try {
+        const targetId = Number(id);
         const data = await graphql(
-          `query($id:Long!){player(steamAccountId:$id){winCount matchCount heroesPerformance(take:3){heroId matchCount winCount} steamAccount{name avatar seasonRank} matches(request:{take:20}){${ST_FIELDS}}}}`,
-          { id: Number(id) },
+          `query($id:Long!){player(steamAccountId:$id){winCount matchCount heroesPerformance(take:3){heroId matchCount winCount} steamAccount{name avatar seasonRank} matches(request:{take:50}){${ST_PROFILE_MATCH_FIELDS}}}}`,
+          { id: targetId },
+          5000,
         );
         const p = z
           .object({
@@ -480,31 +533,33 @@ async function loadProfile(id: string): Promise<PlayerProfile> {
               avatar: z.string().nullish(),
               seasonRank: maybeN,
             }),
-            matches: z.array(z.unknown()),
+            matches: z.array(stProfileMatch),
           })
           .parse(data.player);
-        const matches = p.matches.map(normalizeStratz).flatMap((m) => {
-          const a = m.players.find((p) => p.accountId === Number(id));
-          return a
-            ? [
-                {
-                  id: m.id,
-                  heroId: a.heroId,
-                  won: (a.team === "radiant") === m.radiantWin,
-                  kills: a.kills,
-                  deaths: a.deaths,
-                  assists: a.assists,
-                  gpm: a.gpm,
-                  xpm: a.xpm,
-                  imp: a.imp,
-                  badge: analyzeImpact(m).get(a)?.badge,
-                  role: a.role,
-                  lane: a.lane,
-                  duration: m.duration,
-                  startTime: m.startTime,
-                },
-              ]
-            : [];
+        const matches = p.matches.slice(0, 50).flatMap((m) => {
+          const a =
+            m.players.find((pl) => pl.steamAccountId === targetId) ??
+            m.players[0];
+          if (!a) return [];
+          const won = a.isRadiant === m.didRadiantWin;
+          return [
+            {
+              id: String(m.id),
+              heroId: a.heroId,
+              won,
+              kills: a.kills,
+              deaths: a.deaths,
+              assists: a.assists,
+              gpm: a.goldPerMinute,
+              xpm: a.experiencePerMinute,
+              imp: a.imp,
+              badge: profileBadge(a.imp, won),
+              role: parseRole(a.position),
+              lane: parseLane(a.lane),
+              duration: m.durationSeconds,
+              startTime: m.startDateTime,
+            },
+          ];
         });
         const heroMap = new Map<
           number,
@@ -518,10 +573,10 @@ async function loadProfile(id: string): Promise<PlayerProfile> {
           };
           h.games++;
           h.wins += Number(m.won);
-          heroMap.set(h.heroId, h);
+          heroMap.set(m.heroId, h);
         }
         return {
-          accountId: Number(id),
+          accountId: targetId,
           name: p.steamAccount.name ?? `Игрок ${id}`,
           avatar: p.steamAccount.avatar ?? null,
           rank: rankName(p.steamAccount.seasonRank),
@@ -541,9 +596,7 @@ async function loadProfile(id: string): Promise<PlayerProfile> {
           private: !matches.length,
           source: "stratz",
         } satisfies PlayerProfile;
-      } catch {
-        /* OpenDota is the public fallback. */
-      }
+      } catch {}
     return openProfile(Number(id));
   });
 }

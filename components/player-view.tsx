@@ -11,10 +11,11 @@ import {
   UserRound,
 } from "lucide-react";
 import type { PlayerProfile } from "@/lib/types";
-import { ago, heroName, number, roles, time } from "@/lib/format";
+import { ago, heroName, roles, time } from "@/lib/format";
 import { HeroPortrait, ImpactBar, Skeleton } from "./ui";
 import { useData } from "./use-data";
 import { ErrorState } from "./error-state";
+
 export function PlayerView({ id }: { id: string }) {
   const {
     data: p,
@@ -49,7 +50,7 @@ export function PlayerView({ id }: { id: string }) {
       <div className="breadcrumb">
         <Link href="/">Обзор</Link>
         <ChevronRight size={12} /> Профиль игрока <ChevronRight size={12} />{" "}
-        {p.name}
+        <span className="truncate max-w-[180px] sm:max-w-none">{p.name}</span>
       </div>
       {p.source === "demo" && (
         <div className="notice demo">
@@ -63,19 +64,23 @@ export function PlayerView({ id }: { id: string }) {
         </div>
       )}
       <div className="page-top">
-        <div className="flex items-center gap-5">
+        <div className="flex items-center gap-5 min-w-0">
           {p.avatar ? (
             <img
               src={p.avatar}
-              className="profile-avatar"
+              className="profile-avatar shrink-0"
               alt={`Аватар ${p.name}`}
             />
           ) : (
-            <div className="profile-avatar avatar-placeholder">{p.name[0]}</div>
+            <div className="profile-avatar avatar-placeholder shrink-0">
+              {p.name[0]}
+            </div>
           )}
-          <div>
+          <div className="min-w-0">
             <div className="eyebrow subtle">ПРОФИЛЬ ИГРОКА · {p.accountId}</div>
-            <h1 className="page-title">{p.name}</h1>
+            <h1 className="page-title truncate" title={p.name}>
+              {p.name}
+            </h1>
             <div className="rank-badge">
               <Shield size={16} /> {p.rank}
             </div>
@@ -89,7 +94,7 @@ export function PlayerView({ id }: { id: string }) {
         </div>
         <button
           disabled={loading}
-          className="button button-ghost"
+          className="button button-ghost shrink-0"
           onClick={refresh}
         >
           <RefreshCw size={14} className={loading ? "spin" : ""} /> Обновить
@@ -206,31 +211,33 @@ export function PlayerView({ id }: { id: string }) {
                   : "OpenDota"}
             </span>
           </div>
-          <div className="table-scroll">
-            <table>
+          <div className="table-scroll overflow-x-auto w-full max-w-full">
+            <table className="min-w-[680px]">
               <thead>
                 <tr>
-                  <th>ГЕРОЙ / РЕЗУЛЬТАТ</th>
-                  <th>РОЛЬ / ЛАЙН</th>
-                  <th>K / D / A</th>
-                  <th>GPM / XPM</th>
-                  <th>IMPACT</th>
-                  <th>ДЛИТЕЛЬНОСТЬ</th>
-                  <th>КОГДА</th>
-                  <th />
+                  <th className="min-w-[160px] max-w-[200px] px-3">
+                    ГЕРОЙ / РЕЗУЛЬТАТ
+                  </th>
+                  <th className="px-3">РОЛЬ / ЛАЙН</th>
+                  <th className="px-3">K / D / A</th>
+                  <th className="px-3">GPM / XPM</th>
+                  <th className="px-3">IMPACT</th>
+                  <th className="px-3">ДЛИТЕЛЬНОСТЬ</th>
+                  <th className="px-3">КОГДА</th>
+                  <th className="px-3" />
                 </tr>
               </thead>
               <tbody>
                 {ms.map((m, i) => (
                   <tr key={`${m.id}-${i}`}>
-                    <td>
+                    <td className="min-w-[160px] max-w-[200px] px-3">
                       <Link
-                        className="player-cell account-link"
+                        className="player-cell gap-3 account-link min-w-0"
                         href={`/match/${m.id}`}
                       >
-                        <HeroPortrait id={m.heroId} />
-                        <div>
-                          <b>{heroName(m.heroId)}</b>
+                        <HeroPortrait id={m.heroId} className="shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <b className="truncate">{heroName(m.heroId)}</b>
                           <small
                             className={
                               m.won ? "!text-emerald-400" : "!text-rose-400"
@@ -241,22 +248,22 @@ export function PlayerView({ id }: { id: string }) {
                         </div>
                       </Link>
                     </td>
-                    <td>
+                    <td className="px-3 whitespace-nowrap">
                       {m.role ? roles[m.role] : "Неизвестно"}
                       <small className="block dim mt-1">
                         {m.lane ?? "Нет данных"}
                       </small>
                     </td>
-                    <td>
+                    <td className="px-3 whitespace-nowrap">
                       <span className="text-white">{m.kills}</span> /{" "}
                       <span className="text-rose-300">{m.deaths}</span> /{" "}
                       {m.assists}
                     </td>
-                    <td>
+                    <td className="px-3 whitespace-nowrap">
                       {m.gpm ?? "—"}{" "}
                       <span className="dim">/ {m.xpm ?? "—"}</span>
                     </td>
-                    <td>
+                    <td className="px-3">
                       {m.imp !== null ? (
                         <>
                           <ImpactBar score={m.imp} />
@@ -270,9 +277,13 @@ export function PlayerView({ id }: { id: string }) {
                         <span className="dim">Нет IMP</span>
                       )}
                     </td>
-                    <td>{time(m.duration)}</td>
-                    <td className="dim">{ago(m.startTime)}</td>
-                    <td>
+                    <td className="px-3 whitespace-nowrap">
+                      {time(m.duration)}
+                    </td>
+                    <td className="px-3 dim whitespace-nowrap">
+                      {ago(m.startTime)}
+                    </td>
+                    <td className="px-3">
                       <Link
                         href={`/match/${m.id}`}
                         aria-label={`Разобрать матч ${m.id}`}

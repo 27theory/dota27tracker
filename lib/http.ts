@@ -15,7 +15,18 @@ export function apiError(error: unknown) {
 }
 const limits = new Map<string, { count: number; until: number }>();
 export function guardMutation(req: Request, scope: string, max = 5) {
-  if (req.headers.get("origin") !== appUrl())
+  const origin = req.headers.get("origin");
+  const configured = process.env.NEXT_PUBLIC_APP_URL;
+  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+  let sameHost = false;
+  if (origin && host) {
+    try {
+      sameHost = new URL(origin).host === host;
+    } catch {
+      sameHost = false;
+    }
+  }
+  if (configured ? origin !== appUrl() : !sameHost && origin !== appUrl())
     throw new DataError(
       "Запрос разрешен только с адреса приложения (NEXT_PUBLIC_APP_URL)",
       403,

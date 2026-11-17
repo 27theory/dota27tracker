@@ -21,6 +21,7 @@ import { useData } from "./use-data";
 import { ErrorState } from "./error-state";
 import { AiCoach } from "./ai-coach";
 import { MatchCharts } from "./charts";
+
 export function MatchView({ id }: { id: string }) {
   const {
     data: m,
@@ -231,20 +232,22 @@ export function MatchView({ id }: { id: string }) {
                 {(team === "radiant") === m.radiantWin ? "ПОБЕДА" : "ПОРАЖЕНИЕ"}
               </span>
             </div>
-            <div className="table-scroll">
-              <table>
+            <div className="table-scroll overflow-x-auto w-full max-w-full">
+              <table className="min-w-[940px]">
                 <thead>
                   <tr>
-                    <th>ИГРОК / ГЕРОЙ</th>
-                    <th>РОЛЬ / ЛАЙН</th>
-                    <th>K / D / A</th>
-                    <th>LH / DN</th>
-                    <th>GPM / XPM</th>
-                    <th>НЕТВОРС</th>
-                    <th>УРОН / ВЫШКИ</th>
-                    <th>ЛЕЧЕНИЕ / ВАРДЫ</th>
-                    <th>IMPACT</th>
-                    <th>ФИНАЛЬНЫЙ БИЛД / ТАЙМИНГИ</th>
+                    <th className="min-w-[160px] max-w-[200px] px-3">
+                      ИГРОК / ГЕРОЙ
+                    </th>
+                    <th className="px-3">РОЛЬ / ЛАЙН</th>
+                    <th className="px-3">K / D / A</th>
+                    <th className="px-3">LH / DN</th>
+                    <th className="px-3">GPM / XPM</th>
+                    <th className="px-3">НЕТВОРС</th>
+                    <th className="px-3">УРОН / ВЫШКИ</th>
+                    <th className="px-3">ЛЕЧЕНИЕ / ВАРДЫ</th>
+                    <th className="px-3">IMPACT</th>
+                    <th className="px-3">ФИНАЛЬНЫЙ БИЛД / ТАЙМИНГИ</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -252,25 +255,30 @@ export function MatchView({ id }: { id: string }) {
                     .filter((p) => p.team === team)
                     .map((p, i) => (
                       <tr key={i}>
-                        <td>
-                          <div className="player-cell">
-                            <HeroPortrait id={p.heroId} />
-                            <div>
+                        <td className="min-w-[160px] max-w-[200px] px-3">
+                          <div className="player-cell gap-3 min-w-0">
+                            <HeroPortrait id={p.heroId} className="shrink-0" />
+                            <div className="min-w-0 flex-1">
                               {p.accountId ? (
                                 <Link
-                                  className="account-link"
+                                  className="account-link block truncate"
                                   href={`/player/${m.source === "demo" ? "demo" : p.accountId}`}
+                                  title={p.name}
                                 >
-                                  <b>{p.name}</b>
+                                  <b className="truncate">{p.name}</b>
                                 </Link>
                               ) : (
-                                <b>{p.name}</b>
+                                <b className="truncate" title={p.name}>
+                                  {p.name}
+                                </b>
                               )}
-                              <small>{heroName(p.heroId)}</small>
+                              <small className="truncate">
+                                {heroName(p.heroId)}
+                              </small>
                             </div>
                           </div>
                         </td>
-                        <td>
+                        <td className="px-3 whitespace-nowrap">
                           {p.role ? roles[p.role] : "—"}
                           <small
                             className={`block mt-1 text-[9px] ${p.laneOutcome?.includes("победа") ? "green" : p.laneOutcome ? "red" : "dim"}`}
@@ -279,27 +287,29 @@ export function MatchView({ id }: { id: string }) {
                             {p.laneOutcome ? `· ${p.laneOutcome}` : ""}
                           </small>
                         </td>
-                        <td className="text-white">
+                        <td className="px-3 text-white whitespace-nowrap">
                           {p.kills} <span className="dim">/</span>{" "}
                           <span className="red">{p.deaths}</span>{" "}
                           <span className="dim">/</span> {p.assists}
                         </td>
-                        <td>
+                        <td className="px-3 whitespace-nowrap">
                           {p.lastHits} <span className="dim">/ {p.denies}</span>
                         </td>
-                        <td>
+                        <td className="px-3 whitespace-nowrap">
                           {p.gpm} <span className="dim">/ {p.xpm}</span>
                         </td>
-                        <td className="gold">{number(p.networth)}</td>
-                        <td>
+                        <td className="px-3 gold whitespace-nowrap">
+                          {number(p.networth)}
+                        </td>
+                        <td className="px-3 whitespace-nowrap">
                           {number(p.heroDamage)}{" "}
                           <span className="dim">/ {number(p.towerDamage)}</span>
                         </td>
-                        <td>
+                        <td className="px-3 whitespace-nowrap">
                           {number(p.healing)}{" "}
                           <span className="dim">/ {p.wards ?? "—"}</span>
                         </td>
-                        <td>
+                        <td className="px-3">
                           <div className="flex items-center gap-2">
                             <ImpactBar
                               score={impacts.get(p)!.score}
@@ -313,7 +323,7 @@ export function MatchView({ id }: { id: string }) {
                             {impacts.get(p)!.reasons[0]}
                           </small>
                         </td>
-                        <td>
+                        <td className="px-3">
                           <div className="items">
                             {p.items.map((item, i) => (
                               <ItemIcon id={item} key={i} />
@@ -365,6 +375,7 @@ export function MatchView({ id }: { id: string }) {
     </div>
   );
 }
+
 function PlayerHighlight({
   title,
   player: p,
@@ -390,13 +401,15 @@ function PlayerHighlight({
         )}{" "}
         {title}
       </div>
-      <div className="player-cell">
-        <HeroPortrait id={p.heroId} />
-        <div>
-          <b>{p.name}</b>
-          <small>{heroName(p.heroId)}</small>
+      <div className="player-cell gap-3 min-w-0">
+        <HeroPortrait id={p.heroId} className="shrink-0" />
+        <div className="min-w-0 flex-1">
+          <b className="truncate" title={p.name}>
+            {p.name}
+          </b>
+          <small className="truncate">{heroName(p.heroId)}</small>
         </div>
-        <b className={`ml-auto ${kind}`}>
+        <b className={`ml-auto shrink-0 ${kind}`}>
           {impact.estimated ? "≈" : ""}
           {impact.score > 0 ? "+" : ""}
           {impact.score}
