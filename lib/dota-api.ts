@@ -4,7 +4,9 @@ import { analyzeImpact } from "./impact-analyzer";
 import type { Match, MatchPlayer, PlayerProfile, Role } from "./types";
 import { itemId, itemName, rankName } from "./format";
 import { demoMatch, demoProfile } from "./demo";
+
 const cache = new Map<string, { until: number; value: unknown }>();
+
 export async function cached<T>(
   key: string,
   load: () => Promise<T>,
@@ -16,11 +18,13 @@ export async function cached<T>(
   cache.set(key, { until: Date.now() + 120000, value });
   return value;
 }
+
 export function clearCache(key: string) {
   cache.delete(key);
   if (key.startsWith("player:"))
     cache.delete(key.replace("player:", "steam-profile:"));
 }
+
 export class DataError extends Error {
   constructor(
     message: string,
@@ -29,6 +33,7 @@ export class DataError extends Error {
     super(message);
   }
 }
+
 export async function requestJson(
   url: string,
   init?: RequestInit,
@@ -49,6 +54,7 @@ export async function requestJson(
     );
   return res.json();
 }
+
 async function graphql(query: string, variables: Record<string, unknown>) {
   if (!process.env.STRATZ_API_TOKEN)
     throw new DataError("STRATZ token missing");
@@ -62,6 +68,7 @@ async function graphql(query: string, variables: Record<string, unknown>) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "User-Agent": "STRATZ_API",
           Authorization: `Bearer ${process.env.STRATZ_API_TOKEN}`,
         },
         body: JSON.stringify({ query, variables }),
@@ -71,6 +78,7 @@ async function graphql(query: string, variables: Record<string, unknown>) {
     throw new DataError("STRATZ не вернул данные");
   return raw.data;
 }
+
 const n = z
   .number()
   .nullish()
@@ -79,6 +87,7 @@ const maybeN = z
   .number()
   .nullish()
   .transform((v) => v ?? null);
+
 const odPlayer = z.object({
   account_id: maybeN,
   personaname: z.string().nullish(),
@@ -113,6 +122,7 @@ const odPlayer = z.object({
     .array(z.object({ key: z.string(), time: z.number() }))
     .nullish(),
 });
+
 const odMatch = z.object({
   match_id: z.number(),
   duration: z.number(),
@@ -127,6 +137,7 @@ const odMatch = z.object({
   players: z.array(odPlayer).length(10),
   version: maybeN,
 });
+
 export function normalizeOpenDota(data: unknown): Match {
   const m = odMatch.parse(data);
   const players: MatchPlayer[] = m.players.map((p) => ({
@@ -195,6 +206,7 @@ export function normalizeOpenDota(data: unknown): Match {
       "Данные OpenDota. IMP рассчитан локально; неизвестные позиции и лайнинг не оцениваются.",
   };
 }
+
 const stPlayer = z.object({
   steamAccountId: maybeN,
   steamAccount: z.object({ name: z.string().nullish() }).nullish(),
@@ -229,6 +241,7 @@ const stPlayer = z.object({
     })
     .nullish(),
 });
+
 const stMatch = z.object({
   id: z.number(),
   durationSeconds: z.number(),
@@ -244,7 +257,9 @@ const stMatch = z.object({
   radiantExperienceLeads: z.array(z.number()).nullish(),
   players: z.array(stPlayer).length(10),
 });
+
 const ST_FIELDS = `id durationSeconds startDateTime didRadiantWin gameMode rank averageRank topLaneOutcome midLaneOutcome bottomLaneOutcome radiantNetworthLeads radiantExperienceLeads players { steamAccountId steamAccount { name } heroId isRadiant position lane kills deaths assists goldPerMinute experiencePerMinute numLastHits numDenies networth heroDamage towerDamage heroHealing imp item0Id item1Id item2Id item3Id item4Id item5Id neutral0Id stats { itemPurchases { itemId time } } }`;
+
 export function normalizeStratz(raw: unknown): Match {
   const m = stMatch.parse(raw);
   const players: MatchPlayer[] = m.players.map((p) => ({
@@ -316,6 +331,7 @@ export function normalizeStratz(raw: unknown): Match {
     parsed: players.some((p) => p.purchases.length > 0),
   };
 }
+
 export async function getMatch(id: string): Promise<Match> {
   if (id === "demo") return demoMatch();
   if (!/^\d{1,12}$/.test(id) || BigInt(id) === 0n)
@@ -334,6 +350,7 @@ export async function getMatch(id: string): Promise<Match> {
     }
   });
 }
+
 const odRecent = z.object({
   match_id: z.number(),
   hero_id: n,
@@ -348,11 +365,28 @@ const odRecent = z.object({
   xp_per_min: maybeN,
   lane_role: maybeN,
 });
+
 async function openProfile(id: number): Promise<PlayerProfile> {
+  const projectFields = [
+    "hero_id",
+    "player_slot",
+    "radiant_win",
+    "kills",
+    "deaths",
+    "assists",
+    "duration",
+    "start_time",
+    "gold_per_min",
+    "xp_per_min",
+    "lane_role",
+  ]
+    .map((f) => `project=${f}`)
+    .join("&");
+
   const [raw, recent, wl, heroStats] = await Promise.all([
     requestJson(`https://api.opendota.com/api/players/${id}`),
     requestJson(
-      `https://api.opendota.com/api/players/${id}/matches?limit=20&project=gold_per_min&project=xp_per_min&project=lane_role`,
+      `https://api.opendota.com/api/players/${id}/matches?limit=20&${projectFields}`,
     ).catch(() =>
       requestJson(`https://api.opendota.com/api/players/${id}/recentMatches`),
     ),
@@ -416,6 +450,7 @@ async function openProfile(id: number): Promise<PlayerProfile> {
     source: "opendota",
   };
 }
+
 async function loadProfile(id: string): Promise<PlayerProfile> {
   if (id === "demo") return demoProfile();
   if (!/^\d{1,10}$/.test(id) || Number(id) <= 0 || Number(id) > 4294967295)
@@ -513,7 +548,6 @@ async function loadProfile(id: string): Promise<PlayerProfile> {
   });
 }
 
-// Lane outcomes are reported per physical lane; Dire safe lane is top.
 function laneOutcome(
   lane: string | null | undefined,
   radiant: boolean,
@@ -540,6 +574,7 @@ function laneOutcome(
   const won = result.startsWith(radiant ? "RADIANT" : "DIRE");
   return `${won ? "победа" : "поражение"}${result.endsWith("STOMP") ? " в салат" : ""}`;
 }
+
 export async function getProfile(id: string): Promise<PlayerProfile> {
   const profile = await loadProfile(id);
   if (id === "demo" || !process.env.STEAM_API_KEY) return profile;
