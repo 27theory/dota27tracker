@@ -54,9 +54,10 @@ export async function POST(req: Request) {
         signal: AbortSignal.timeout(60000),
       },
     );
-    if (!response.ok)
+    if (!response.ok) {
+      const errText = await response.text().catch(() => "");
       throw new DataError(
-        "AI-сервис не ответил. Проверьте ключ, модель и лимиты провайдера.",
+        `OpenRouter (${response.status}): ${errText.slice(0, 200) || "нет ответа"}`,
         502,
       );
     const result = z
