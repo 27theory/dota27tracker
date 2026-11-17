@@ -54,7 +54,7 @@ export async function POST(req: Request) {
           "HTTP-Referer": "https://dota27tracker.vercel.app",
           "X-Title": "DotaScope",
         },
-        body: JSON.stringify({
+   body: JSON.stringify({
           model: process.env.AI_MODEL ?? "gemini-2.5-flash",
           messages: [
             { role: "system", content: SYSTEM_PROMPT },
@@ -64,7 +64,8 @@ export async function POST(req: Request) {
             },
           ],
           temperature: 0.35,
-          max_tokens: 1800,
+          max_tokens: 4500,
+          reasoning: { effort: "low" },
         }),
         signal: AbortSignal.timeout(55000),
       },
