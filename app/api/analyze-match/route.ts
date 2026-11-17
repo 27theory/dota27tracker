@@ -34,9 +34,11 @@ export async function POST(req: Request) {
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${process.env.AI_API_KEY}`,
-          "Content-Type": "application/json",
-        },
+  Authorization: `Bearer ${process.env.AI_API_KEY}`,
+  "Content-Type": "application/json",
+  "HTTP-Referer": "https://dota27tracker.vercel.app",
+  "X-Title": "DotaScope",
+},
         body: JSON.stringify({
           model: process.env.AI_MODEL ?? "gemini-2.5-flash",
           messages: [
