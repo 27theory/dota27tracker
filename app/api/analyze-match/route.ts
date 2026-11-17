@@ -4,6 +4,8 @@ import { getMatch, DataError } from "@/lib/dota-api";
 import { apiError, guardMutation } from "@/lib/http";
 import { buildMatchPromptSummary, SYSTEM_PROMPT } from "@/lib/ai";
 
+export const maxDuration = 60;
+
 export async function POST(req: Request) {
   try {
     guardMutation(req, "ai", 4);
@@ -64,7 +66,7 @@ export async function POST(req: Request) {
           temperature: 0.35,
           max_tokens: 1800,
         }),
-        signal: AbortSignal.timeout(60000),
+        signal: AbortSignal.timeout(55000),
       },
     );
 
@@ -76,15 +78,23 @@ export async function POST(req: Request) {
       );
     }
 
-    const result = z
-      .object({
-        choices: z
-          .array(z.object({ message: z.object({ content: z.string() }) }))
-          .min(1),
-      })
-      .parse(await response.json());
+    const rawJson = await response.json();
+    if (rawJson?.error) {
+      throw new DataError(
+        `OpenRouter error: ${rawJson.error.message ?? JSON.stringify(rawJson.error).slice(0, 150)}`,
+        502,
+      );
+    }
 
-    return NextResponse.json({ analysis: result.choices[0].message.content });
+    const content = rawJson?.choices?.[0]?.message?.content;
+    if (typeof content !== "string" || !content.trim()) {
+      throw new DataError(
+        "Модель вернула пустой ответ (попробуйте ещё раз или смените модель).",
+        502,
+      );
+    }
+
+    return NextResponse.json({ analysis: content });
   } catch (e) {
     if (e instanceof SyntaxError) {
       return apiError(new DataError("Некорректный JSON", 400));
