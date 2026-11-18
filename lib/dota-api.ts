@@ -3,26 +3,17 @@ import { z } from "zod";
 import type { Match, MatchPlayer, PlayerProfile, Role } from "./types";
 import { itemId, itemName, rankName } from "./format";
 import { demoMatch, demoProfile } from "./demo";
+import {
+  cached,
+  clearCache,
+  MATCH_TTL,
+  PLAYER_TTL,
+} from "./cache";
 
-const cache = new Map<string, { until: number; value: unknown }>();
+export { cached, clearCache, MATCH_TTL, PLAYER_TTL };
 
-export async function cached<T>(
-  key: string,
-  load: () => Promise<T>,
-): Promise<T> {
-  const found = cache.get(key);
-  if (found && found.until > Date.now()) return found.value as T;
-  const value = await load();
-  if (cache.size > 300) cache.delete(cache.keys().next().value!);
-  cache.set(key, { until: Date.now() + 120000, value });
-  return value;
-}
-
-export function clearCache(key: string) {
-  cache.delete(key);
-  if (key.startsWith("player:"))
-    cache.delete(key.replace("player:", "steam-profile:"));
-}
+export const INITIAL_PROFILE_MATCHES = 150;
+export const PROFILE_PAGE_STEP = 50;
 
 export class DataError extends Error {
   constructor(
@@ -31,6 +22,21 @@ export class DataError extends Error {
   ) {
     super(message);
   }
+}
+
+export async function runBatched<T, R>(
+  items: T[],
+  worker: (item: T) => Promise<R>,
+  concurrency = 5,
+): Promise<PromiseSettledResult<R>[]> {
+  const step = Math.max(1, Math.min(10, concurrency));
+  const results: PromiseSettledResult<R>[] = [];
+  for (let i = 0; i < items.length; i += step) {
+    const slice = items.slice(i, i + step);
+    const settled = await Promise.allSettled(slice.map((item) => worker(item)));
+    results.push(...settled);
+  }
+  return results;
 }
 
 export async function requestJson(
@@ -115,7 +121,19 @@ const odPlayer = z.object({
   hero_healing: n,
   obs_placed: maybeN,
   rank_tier: maybeN,
-  purchase: z.object({ ward_observer: n, ward_sentry: n }).nullish(),
+  teamfight_participation: maybeN,
+  lh_t: z.array(z.number()).nullish(),
+  dn_t: z.array(z.number()).nullish(),
+  gold_t: z.array(z.number()).nullish(),
+  xp_t: z.array(z.number()).nullish(),
+  purchase: z
+    .object({
+      ward_observer: n,
+      ward_sentry: n,
+      smoke_of_deceit: n,
+      dust: n,
+    })
+    .nullish(),
   sen_placed: maybeN,
   lane_role: maybeN,
   lane_efficiency_pct: maybeN,
@@ -146,58 +164,101 @@ const odMatch = z.object({
   version: maybeN,
 });
 
+function atMinute(arr: number[] | null | undefined, minute: number): number | null {
+  if (!arr || !arr.length) return null;
+  if (arr.length > minute) return arr[minute];
+  return null;
+}
+
+function sumUntilMinute(arr: number[] | null | undefined, minute: number): number | null {
+  if (!arr || !arr.length) return null;
+  const end = Math.min(arr.length, minute + 1);
+  if (end <= 1) return null;
+  let total = 0;
+  for (let i = 1; i < end; i++) total += arr[i] ?? 0;
+  return total;
+}
+
 export function normalizeOpenDota(data: unknown): Match {
   const m = odMatch.parse(data);
-  const players: MatchPlayer[] = m.players.map((p) => ({
-    accountId: p.account_id,
-    name: p.personaname ?? p.name ?? "Аноним",
-    heroId: p.hero_id,
-    team: p.player_slot < 128 ? "radiant" : "dire",
-    role: p.lane_role === 2 ? 2 : null,
-    lane:
-      (
-        { 1: "Легкая", 2: "Мид", 3: "Сложная", 4: "Лес" } as Record<
-          number,
-          string
-        >
-      )[p.lane_role ?? 0] ?? null,
-    laneOutcome: null,
-    kills: p.kills,
-    deaths: p.deaths,
-    assists: p.assists,
-    gpm: p.gold_per_min,
-    xpm: p.xp_per_min,
-    lastHits: p.last_hits,
-    denies: p.denies,
-    networth: p.net_worth,
-    heroDamage: p.hero_damage,
-    towerDamage: p.tower_damage,
-    healing: p.hero_healing,
-    wards: p.purchase
-      ? p.purchase.ward_observer + p.purchase.ward_sentry
-      : null,
-    imp: null,
-    items: [p.item_0, p.item_1, p.item_2, p.item_3, p.item_4, p.item_5],
-    neutralItem: p.item_neutral,
-    purchases: (p.purchase_log ?? []).map((e) => ({
-      id: itemId(e.key),
-      name: itemName(itemId(e.key)),
-      time: e.time,
-    })),
-  }));
+  const radiantKills =
+    m.radiant_score ??
+    m.players
+      .filter((p) => p.player_slot < 128)
+      .reduce((s, p) => s + p.kills, 0);
+  const direKills =
+    m.dire_score ??
+    m.players
+      .filter((p) => p.player_slot >= 128)
+      .reduce((s, p) => s + p.kills, 0);
+
+  const players: MatchPlayer[] = m.players.map((p) => {
+    const isRadiant = p.player_slot < 128;
+    const teamKills = Math.max(1, isRadiant ? radiantKills : direKills);
+    const tfPct =
+      p.teamfight_participation !== null
+        ? Math.round(
+            p.teamfight_participation <= 1
+              ? p.teamfight_participation * 100
+              : p.teamfight_participation,
+          )
+        : Math.min(100, Math.round(((p.kills + p.assists) / teamKills) * 100));
+    return {
+      accountId: p.account_id,
+      name: p.personaname ?? p.name ?? "Аноним",
+      heroId: p.hero_id,
+      team: isRadiant ? "radiant" : "dire",
+      role: p.lane_role === 2 ? 2 : null,
+      lane:
+        (
+          { 1: "Легкая", 2: "Мид", 3: "Сложная", 4: "Лес" } as Record<
+            number,
+            string
+          >
+        )[p.lane_role ?? 0] ?? null,
+      laneOutcome: null,
+      kills: p.kills,
+      deaths: p.deaths,
+      assists: p.assists,
+      gpm: p.gold_per_min,
+      xpm: p.xp_per_min,
+      lastHits: p.last_hits,
+      denies: p.denies,
+      networth: p.net_worth,
+      heroDamage: p.hero_damage,
+      towerDamage: p.tower_damage,
+      healing: p.hero_healing,
+      wards: p.purchase
+        ? p.purchase.ward_observer + p.purchase.ward_sentry
+        : null,
+      smokes: p.purchase ? p.purchase.smoke_of_deceit : null,
+      dusts: p.purchase ? p.purchase.dust : null,
+      teamfightParticipation: tfPct,
+      lh10: atMinute(p.lh_t, 10),
+      dn10: atMinute(p.dn_t, 10),
+      lh20: atMinute(p.lh_t, 20),
+      dn20: atMinute(p.dn_t, 20),
+      gold10: atMinute(p.gold_t, 10),
+      xp10: atMinute(p.xp_t, 10),
+      deathsBefore15m: null,
+      deathsAfter35m: null,
+      imp: null,
+      items: [p.item_0, p.item_1, p.item_2, p.item_3, p.item_4, p.item_5],
+      neutralItem: p.item_neutral,
+      purchases: (p.purchase_log ?? []).map((e) => ({
+        id: itemId(e.key),
+        name: itemName(itemId(e.key)),
+        time: e.time,
+      })),
+    };
+  });
   return {
     id: String(m.match_id),
     duration: m.duration,
     startTime: m.start_time,
     radiantWin: m.radiant_win,
-    radiantScore:
-      m.radiant_score ??
-      players
-        .filter((p) => p.team === "radiant")
-        .reduce((s, p) => s + p.kills, 0),
-    direScore:
-      m.dire_score ??
-      players.filter((p) => p.team === "dire").reduce((s, p) => s + p.kills, 0),
+    radiantScore: radiantKills,
+    direScore: direKills,
     mode:
       m.game_mode === 22 ? "Рейтинговый · All Pick" : `Режим ${m.game_mode}`,
     rank: m.rank_tier
@@ -267,6 +328,11 @@ const stPlayer = z.object({
       itemPurchases: z
         .array(z.object({ itemId: z.number(), time: z.number() }))
         .nullish(),
+      lastHitPerMinute: z.array(z.number()).nullish(),
+      deniesPerMinute: z.array(z.number()).nullish(),
+      networthPerMinute: z.array(z.number()).nullish(),
+      experiencePerMinute: z.array(z.number()).nullish(),
+      deathEvents: z.array(z.object({ time: z.number() })).nullish(),
     })
     .nullish(),
 });
@@ -287,7 +353,7 @@ const stMatch = z.object({
   players: z.array(stPlayer).length(10),
 });
 
-const ST_FIELDS = `id durationSeconds startDateTime didRadiantWin gameMode rank averageRank topLaneOutcome midLaneOutcome bottomLaneOutcome radiantNetworthLeads radiantExperienceLeads players { steamAccountId steamAccount { name } heroId isRadiant position lane kills deaths assists goldPerMinute experiencePerMinute numLastHits numDenies networth heroDamage towerDamage heroHealing imp item0Id item1Id item2Id item3Id item4Id item5Id neutral0Id stats { itemPurchases { itemId time } } }`;
+const ST_FIELDS = `id durationSeconds startDateTime didRadiantWin gameMode rank averageRank topLaneOutcome midLaneOutcome bottomLaneOutcome radiantNetworthLeads radiantExperienceLeads players { steamAccountId steamAccount { name } heroId isRadiant position lane kills deaths assists goldPerMinute experiencePerMinute numLastHits numDenies networth heroDamage towerDamage heroHealing imp item0Id item1Id item2Id item3Id item4Id item5Id neutral0Id stats { itemPurchases { itemId time } lastHitPerMinute deniesPerMinute networthPerMinute experiencePerMinute deathEvents { time } } }`;
 
 const ST_PROFILE_MATCH_FIELDS = `id durationSeconds startDateTime didRadiantWin gameMode players(steamAccountId: $id) { steamAccountId heroId isRadiant position lane kills deaths assists goldPerMinute experiencePerMinute imp }`;
 
@@ -316,55 +382,84 @@ const stProfileMatch = z.object({
 
 export function normalizeStratz(raw: unknown): Match {
   const m = stMatch.parse(raw);
-  const players: MatchPlayer[] = m.players.map((p) => ({
-    accountId: p.steamAccountId,
-    name: p.steamAccount?.name ?? "Аноним",
-    heroId: p.heroId,
-    team: p.isRadiant ? "radiant" : "dire",
-    role: parseRole(p.position),
-    lane: parseLane(p.lane),
-    laneOutcome: laneOutcome(p.lane, p.isRadiant, m),
-    kills: p.kills,
-    deaths: p.deaths,
-    assists: p.assists,
-    gpm: p.goldPerMinute,
-    xpm: p.experiencePerMinute,
-    lastHits: p.numLastHits,
-    denies: p.numDenies,
-    networth: p.networth,
-    heroDamage: p.heroDamage,
-    towerDamage: p.towerDamage,
-    healing: p.heroHealing,
-    wards: p.stats?.itemPurchases
-      ? p.stats.itemPurchases.filter((e) => [42, 43, 218].includes(e.itemId))
-          .length
-      : null,
-    imp: p.imp,
-    items: [p.item0Id, p.item1Id, p.item2Id, p.item3Id, p.item4Id, p.item5Id],
-    neutralItem: p.neutral0Id,
-    purchases: (p.stats?.itemPurchases ?? []).map((e) => ({
-      id: e.itemId,
-      name: itemName(e.itemId),
-      time: e.time,
-    })),
-  }));
+  const radiantKills = m.players
+    .filter((p) => p.isRadiant)
+    .reduce((s, p) => s + p.kills, 0);
+  const direKills = m.players
+    .filter((p) => !p.isRadiant)
+    .reduce((s, p) => s + p.kills, 0);
+
+  const players: MatchPlayer[] = m.players.map((p) => {
+    const teamKills = Math.max(1, p.isRadiant ? radiantKills : direKills);
+    const purchasesRaw = p.stats?.itemPurchases ?? null;
+    const deathEvents = p.stats?.deathEvents ?? null;
+    return {
+      accountId: p.steamAccountId,
+      name: p.steamAccount?.name ?? "Аноним",
+      heroId: p.heroId,
+      team: p.isRadiant ? "radiant" : "dire",
+      role: parseRole(p.position),
+      lane: parseLane(p.lane),
+      laneOutcome: laneOutcome(p.lane, p.isRadiant, m),
+      kills: p.kills,
+      deaths: p.deaths,
+      assists: p.assists,
+      gpm: p.goldPerMinute,
+      xpm: p.experiencePerMinute,
+      lastHits: p.numLastHits,
+      denies: p.numDenies,
+      networth: p.networth,
+      heroDamage: p.heroDamage,
+      towerDamage: p.towerDamage,
+      healing: p.heroHealing,
+      wards: purchasesRaw
+        ? purchasesRaw.filter((e) => [42, 43, 218].includes(e.itemId)).length
+        : null,
+      smokes: purchasesRaw
+        ? purchasesRaw.filter((e) => e.itemId === 188).length
+        : null,
+      dusts: purchasesRaw
+        ? purchasesRaw.filter((e) => e.itemId === 40).length
+        : null,
+      teamfightParticipation: Math.min(
+        100,
+        Math.round(((p.kills + p.assists) / teamKills) * 100),
+      ),
+      lh10: sumUntilMinute(p.stats?.lastHitPerMinute, 10),
+      dn10: sumUntilMinute(p.stats?.deniesPerMinute, 10),
+      lh20: sumUntilMinute(p.stats?.lastHitPerMinute, 20),
+      dn20: sumUntilMinute(p.stats?.deniesPerMinute, 20),
+      gold10: atMinute(p.stats?.networthPerMinute, 10),
+      xp10: sumUntilMinute(p.stats?.experiencePerMinute, 10),
+      deathsBefore15m: deathEvents
+        ? deathEvents.filter((d) => d.time < 900).length
+        : null,
+      deathsAfter35m: deathEvents
+        ? deathEvents.filter((d) => d.time >= 2100).length
+        : null,
+      imp: p.imp,
+      items: [p.item0Id, p.item1Id, p.item2Id, p.item3Id, p.item4Id, p.item5Id],
+      neutralItem: p.neutral0Id,
+      purchases: (purchasesRaw ?? []).map((e) => ({
+        id: e.itemId,
+        name: itemName(e.itemId),
+        time: e.time,
+      })),
+    };
+  });
   return {
     id: String(m.id),
     duration: m.durationSeconds,
     startTime: m.startDateTime,
     radiantWin: m.didRadiantWin,
-    radiantScore: players
-      .filter((p) => p.team === "radiant")
-      .reduce((s, p) => s + p.kills, 0),
-    direScore: players
-      .filter((p) => p.team === "dire")
-      .reduce((s, p) => s + p.kills, 0),
+    radiantScore: radiantKills,
+    direScore: direKills,
     mode:
       m.gameMode === "ALL_PICK_RANKED"
         ? "Рейтинговый · All Pick"
         : m.gameMode === "ALL_PICK"
-            ? "All Pick"
-            : `Режим ${m.gameMode ?? "неизвестен"}`,
+          ? "All Pick"
+          : `Режим ${m.gameMode ?? "неизвестен"}`,
     rank: rankName(m.averageRank ?? m.rank),
     players,
     goldLeads: (m.radiantNetworthLeads ?? []).slice(1),
@@ -374,23 +469,31 @@ export function normalizeStratz(raw: unknown): Match {
   };
 }
 
-export async function getMatch(id: string): Promise<Match> {
+export async function getMatch(
+  id: string,
+  forceRefresh = false,
+): Promise<Match> {
   if (id === "demo") return demoMatch();
   if (!/^\d{1,12}$/.test(id) || BigInt(id) === 0n)
     throw new DataError("Некорректный Match ID", 400);
-  return cached(`match:${id}`, async () => {
-    try {
-      const data = await graphql(
-        `query($id:Long!){match(id:$id){${ST_FIELDS}}}`,
-        { id: Number(id) },
-      );
-      return normalizeStratz(data.match);
-    } catch {
-      return normalizeOpenDota(
-        await requestJson(`https://api.opendota.com/api/matches/${id}`),
-      );
-    }
-  });
+  return cached(
+    `match:${id}`,
+    async () => {
+      try {
+        const data = await graphql(
+          `query($id:Long!){match(id:$id){${ST_FIELDS}}}`,
+          { id: Number(id) },
+        );
+        return normalizeStratz(data.match);
+      } catch {
+        return normalizeOpenDota(
+          await requestJson(`https://api.opendota.com/api/matches/${id}`),
+        );
+      }
+    },
+    MATCH_TTL,
+    forceRefresh,
+  );
 }
 
 const odRecent = z.object({
@@ -408,7 +511,31 @@ const odRecent = z.object({
   lane_role: maybeN,
 });
 
-async function openProfile(id: number): Promise<PlayerProfile> {
+function aggregateHeroes(
+  matches: { heroId: number; won: boolean }[],
+): { heroId: number; games: number; wins: number }[] {
+  const heroMap = new Map<
+    number,
+    { heroId: number; games: number; wins: number }
+  >();
+  for (const m of matches) {
+    const h = heroMap.get(m.heroId) ?? {
+      heroId: m.heroId,
+      games: 0,
+      wins: 0,
+    };
+    h.games++;
+    h.wins += Number(m.won);
+    heroMap.set(m.heroId, h);
+  }
+  return [...heroMap.values()].sort((a, b) => b.games - a.games).slice(0, 3);
+}
+
+async function openProfile(
+  id: number,
+  offset = 0,
+  limit = INITIAL_PROFILE_MATCHES,
+): Promise<PlayerProfile> {
   const projectFields = [
     "hero_id",
     "player_slot",
@@ -425,20 +552,37 @@ async function openProfile(id: number): Promise<PlayerProfile> {
     .map((f) => `project=${f}`)
     .join("&");
 
-  const [raw, recent, wl, heroStats] = await Promise.all([
-    requestJson(`https://api.opendota.com/api/players/${id}`),
-    requestJson(
-      `https://api.opendota.com/api/players/${id}/matches?limit=50&${projectFields}`,
-    ).catch(() =>
-      requestJson(`https://api.opendota.com/api/players/${id}/recentMatches`),
-    ),
-    requestJson(`https://api.opendota.com/api/players/${id}/wl`).catch(
-      () => null,
-    ),
-    requestJson(`https://api.opendota.com/api/players/${id}/heroes`).catch(
-      () => [],
-    ),
-  ]);
+  const tasks: (() => Promise<unknown>)[] = [
+    () => requestJson(`https://api.opendota.com/api/players/${id}`),
+    () =>
+      requestJson(
+        `https://api.opendota.com/api/players/${id}/matches?limit=${limit}&offset=${offset}&${projectFields}`,
+      ).catch(() =>
+        offset === 0
+          ? requestJson(
+              `https://api.opendota.com/api/players/${id}/recentMatches`,
+            )
+          : [],
+      ),
+    () => requestJson(`https://api.opendota.com/api/players/${id}/wl`),
+    () => requestJson(`https://api.opendota.com/api/players/${id}/heroes`),
+  ];
+
+  const [rawRes, recentRes, wlRes, heroStatsRes] = await runBatched(
+    tasks,
+    (fn) => fn(),
+    5,
+  );
+
+  if (rawRes.status === "rejected") throw rawRes.reason;
+  if (recentRes.status === "rejected") throw recentRes.reason;
+
+  const raw = rawRes.value;
+  const recent = recentRes.value;
+  const wl = wlRes.status === "fulfilled" ? wlRes.value : null;
+  const heroStats =
+    heroStatsRes.status === "fulfilled" ? heroStatsRes.value : [];
+
   const p = z
     .object({
       profile: z
@@ -447,32 +591,43 @@ async function openProfile(id: number): Promise<PlayerProfile> {
       rank_tier: maybeN,
     })
     .parse(raw);
-  const matches = z
-    .array(odRecent)
-    .parse(recent)
-    .slice(0, 50)
-    .map((m) => ({
-      id: String(m.match_id),
-      heroId: m.hero_id,
-      won: m.player_slot < 128 === m.radiant_win,
-      kills: m.kills,
-      deaths: m.deaths,
-      assists: m.assists,
-      gpm: m.gold_per_min,
-      xpm: m.xp_per_min,
-      imp: null,
-      role: m.lane_role === 2 ? (2 as const) : null,
-      lane:
-        ({ 1: "Легкая", 2: "Мид", 3: "Сложная" } as Record<number, string>)[
-          m.lane_role ?? 0
-        ] ?? null,
-      duration: m.duration,
-      startTime: m.start_time,
-    }));
+
+  const parsedRecent = z.array(odRecent).parse(recent);
+  const matches = parsedRecent.slice(0, limit).map((m) => ({
+    id: String(m.match_id),
+    heroId: m.hero_id,
+    won: m.player_slot < 128 === m.radiant_win,
+    kills: m.kills,
+    deaths: m.deaths,
+    assists: m.assists,
+    gpm: m.gold_per_min,
+    xpm: m.xp_per_min,
+    imp: null,
+    role: m.lane_role === 2 ? (2 as const) : null,
+    lane:
+      ({ 1: "Легкая", 2: "Мид", 3: "Сложная" } as Record<number, string>)[
+        m.lane_role ?? 0
+      ] ?? null,
+    duration: m.duration,
+    startTime: m.start_time,
+  }));
+
   const record = z
     .object({ win: z.number(), lose: z.number() })
     .nullable()
+    .catch(null)
     .parse(wl);
+
+  const parsedHeroes = z
+    .array(
+      z.object({ hero_id: z.number(), games: z.number(), win: z.number() }),
+    )
+    .catch([])
+    .parse(heroStats)
+    .filter((h) => h.games > 0)
+    .slice(0, 3)
+    .map((h) => ({ heroId: h.hero_id, games: h.games, wins: h.win }));
+
   return {
     accountId: id,
     name: p.profile?.personaname ?? `Игрок ${id}`,
@@ -481,14 +636,9 @@ async function openProfile(id: number): Promise<PlayerProfile> {
     wins: record?.win ?? null,
     losses: record?.lose ?? null,
     matches,
-    heroes: z
-      .array(
-        z.object({ hero_id: z.number(), games: z.number(), win: z.number() }),
-      )
-      .parse(heroStats)
-      .slice(0, 3)
-      .map((h) => ({ heroId: h.hero_id, games: h.games, wins: h.win })),
-    private: !matches.length,
+    heroes: parsedHeroes.length ? parsedHeroes : aggregateHeroes(matches),
+    private: offset === 0 && !matches.length,
+    hasMore: matches.length >= limit,
     source: "opendota",
   };
 }
@@ -502,103 +652,144 @@ function profileBadge(imp: number | null, won: boolean): string | undefined {
   return "Стабильно";
 }
 
-async function loadProfile(id: string): Promise<PlayerProfile> {
-  if (id === "demo") return demoProfile();
+async function loadProfile(
+  id: string,
+  offset = 0,
+  limit = INITIAL_PROFILE_MATCHES,
+  forceRefresh = false,
+): Promise<PlayerProfile> {
+  if (id === "demo") return demoProfile(offset, limit);
   if (!/^\d{1,10}$/.test(id) || Number(id) <= 0 || Number(id) > 4294967295)
     throw new DataError("Некорректный Account ID", 400);
-  return cached(`player:${id}`, async () => {
-    if (process.env.STRATZ_API_TOKEN)
-      try {
-        const targetId = Number(id);
-        const data = await graphql(
-          `query($id:Long!){player(steamAccountId:$id){winCount matchCount heroesPerformance(take:3){heroId matchCount winCount} steamAccount{name avatar seasonRank} matches(request:{take:50}){${ST_PROFILE_MATCH_FIELDS}}}}`,
-          { id: targetId },
-          5000,
-        );
-        const p = z
-          .object({
-            winCount: maybeN,
-            matchCount: maybeN,
-            heroesPerformance: z
-              .array(
-                z.object({
-                  heroId: z.number(),
-                  matchCount: z.number(),
-                  winCount: z.number(),
-                }),
-              )
-              .nullish(),
-            steamAccount: z.object({
-              name: z.string().nullish(),
-              avatar: z.string().nullish(),
-              seasonRank: maybeN,
-            }),
-            matches: z.array(stProfileMatch),
-          })
-          .parse(data.player);
-        const matches = p.matches.slice(0, 50).flatMap((m) => {
-          const a =
-            m.players.find((pl) => pl.steamAccountId === targetId) ??
-            m.players[0];
-          if (!a) return [];
-          const won = a.isRadiant === m.didRadiantWin;
-          return [
-            {
-              id: String(m.id),
-              heroId: a.heroId,
-              won,
-              kills: a.kills,
-              deaths: a.deaths,
-              assists: a.assists,
-              gpm: a.goldPerMinute,
-              xpm: a.experiencePerMinute,
-              imp: a.imp,
-              badge: profileBadge(a.imp, won),
-              role: parseRole(a.position),
-              lane: parseLane(a.lane),
-              duration: m.durationSeconds,
-              startTime: m.startDateTime,
-            },
-          ];
-        });
-        const heroMap = new Map<
-          number,
-          { heroId: number; games: number; wins: number }
-        >();
-        for (const m of matches) {
-          const h = heroMap.get(m.heroId) ?? {
-            heroId: m.heroId,
-            games: 0,
-            wins: 0,
-          };
-          h.games++;
-          h.wins += Number(m.won);
-          heroMap.set(m.heroId, h);
-        }
-        return {
-          accountId: targetId,
-          name: p.steamAccount.name ?? `Игрок ${id}`,
-          avatar: p.steamAccount.avatar ?? null,
-          rank: rankName(p.steamAccount.seasonRank),
-          wins: p.winCount,
-          losses:
-            p.matchCount !== null && p.winCount !== null
-              ? p.matchCount - p.winCount
-              : null,
-          matches,
-          heroes:
-            p.heroesPerformance?.map((h) => ({
-              heroId: h.heroId,
-              games: h.matchCount,
-              wins: h.winCount,
-            })) ??
-            [...heroMap.values()].sort((a, b) => b.games - a.games).slice(0, 3),
-          private: !matches.length,
-          source: "stratz",
-        } satisfies PlayerProfile;
-      } catch {}
-    return openProfile(Number(id));
-  });
+  const safeOffset = Math.max(0, Math.floor(offset));
+  const safeLimit = Math.max(1, Math.min(200, Math.floor(limit)));
+  return cached(
+    `player:${id}:${safeOffset}:${safeLimit}`,
+    async () => {
+      if (process.env.STRATZ_API_TOKEN) {
+        try {
+          const targetId = Number(id);
+          const chunks: { skip: number; take: number }[] = [];
+          let remaining = safeLimit;
+          let currentSkip = safeOffset;
+          while (remaining > 0) {
+            const take = Math.min(100, remaining);
+            chunks.push({ skip: currentSkip, take });
+            currentSkip += take;
+            remaining -= take;
+          }
+
+          const settled = await runBatched(
+            chunks.map((c, idx) => ({ ...c, idx })),
+            (c) =>
+              c.idx === 0
+                ? graphql(
+                    `query($id:Long!,$take:Int!,$skip:Int!){player(steamAccountId:$id){winCount matchCount heroesPerformance(take:3){heroId matchCount winCount} steamAccount{name avatar seasonRank} matches(request:{take:$take,skip:$skip}){${ST_PROFILE_MATCH_FIELDS}}}}`,
+                    { id: targetId, take: c.take, skip: c.skip },
+                    5000,
+                  )
+                : graphql(
+                    `query($id:Long!,$take:Int!,$skip:Int!){player(steamAccountId:$id){matches(request:{take:$take,skip:$skip}){${ST_PROFILE_MATCH_FIELDS}}}}`,
+                    { id: targetId, take: c.take, skip: c.skip },
+                    5000,
+                  ),
+            5,
+          );
+
+          const first = settled[0];
+          if (!first || first.status === "rejected") {
+            throw first?.status === "rejected"
+              ? first.reason
+              : new DataError("STRATZ failed");
+          }
+
+          const p = z
+            .object({
+              winCount: maybeN,
+              matchCount: maybeN,
+              heroesPerformance: z
+                .array(
+                  z.object({
+                    heroId: z.number(),
+                    matchCount: z.number(),
+                    winCount: z.number(),
+                  }),
+                )
+                .nullish(),
+              steamAccount: z.object({
+                name: z.string().nullish(),
+                avatar: z.string().nullish(),
+                seasonRank: maybeN,
+              }),
+              matches: z.array(stProfileMatch),
+            })
+            .parse(first.value.player);
+
+          const allRawMatches = [...p.matches];
+          for (let i = 1; i < settled.length; i++) {
+            const item = settled[i];
+            if (item.status === "fulfilled") {
+              const extra = z
+                .object({ matches: z.array(stProfileMatch) })
+                .safeParse(item.value.player);
+              if (extra.success) allRawMatches.push(...extra.data.matches);
+            }
+          }
+
+          const matches = allRawMatches.slice(0, safeLimit).flatMap((m) => {
+            const a =
+              m.players.find((pl) => pl.steamAccountId === targetId) ??
+              m.players[0];
+            if (!a) return [];
+            const won = a.isRadiant === m.didRadiantWin;
+            return [
+              {
+                id: String(m.id),
+                heroId: a.heroId,
+                won,
+                kills: a.kills,
+                deaths: a.deaths,
+                assists: a.assists,
+                gpm: a.goldPerMinute,
+                xpm: a.experiencePerMinute,
+                imp: a.imp,
+                badge: profileBadge(a.imp, won),
+                role: parseRole(a.position),
+                lane: parseLane(a.lane),
+                duration: m.durationSeconds,
+                startTime: m.startDateTime,
+              },
+            ];
+          });
+
+          return {
+            accountId: targetId,
+            name: p.steamAccount.name ?? `Игрок ${id}`,
+            avatar: p.steamAccount.avatar ?? null,
+            rank: rankName(p.steamAccount.seasonRank),
+            wins: p.winCount,
+            losses:
+              p.matchCount !== null && p.winCount !== null
+                ? p.matchCount - p.winCount
+                : null,
+            matches,
+            heroes:
+              p.heroesPerformance?.map((h) => ({
+                heroId: h.heroId,
+                games: h.matchCount,
+                wins: h.winCount,
+              })) ?? aggregateHeroes(matches),
+            private: safeOffset === 0 && !matches.length,
+            hasMore: matches.length >= safeLimit,
+            source: "stratz",
+          } satisfies PlayerProfile;
+        } catch {}
+      }
+      return openProfile(Number(id), safeOffset, safeLimit);
+    },
+    PLAYER_TTL,
+    forceRefresh,
+  );
 }
 
 function laneOutcome(
@@ -628,39 +819,53 @@ function laneOutcome(
   return `${won ? "победа" : "поражение"}${result.endsWith("STOMP") ? " в салат" : ""}`;
 }
 
-export async function getProfile(id: string): Promise<PlayerProfile> {
-  const profile = await loadProfile(id);
+export async function getProfile(
+  id: string,
+  options?: { offset?: number; limit?: number; refresh?: boolean },
+): Promise<PlayerProfile> {
+  const offset = options?.offset ?? 0;
+  const limit = options?.limit ?? INITIAL_PROFILE_MATCHES;
+  const refresh = options?.refresh ?? false;
+  if (refresh) {
+    await clearCache(`player:${id}`);
+  }
+  const profile = await loadProfile(id, offset, limit, refresh);
   if (id === "demo" || !process.env.STEAM_API_KEY) return profile;
   try {
-    return await cached(`steam-profile:${id}`, async () => {
-      const url = new URL(
-        "https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/",
-      );
-      url.search = new URLSearchParams({
-        key: process.env.STEAM_API_KEY!,
-        steamids: String(BigInt(id) + 76561197960265728n),
-      }).toString();
-      const raw = z
-        .object({
-          response: z.object({
-            players: z.array(
-              z.object({
-                personaname: z.string(),
-                avatarfull: z.string().optional(),
-              }),
-            ),
-          }),
-        })
-        .parse(await requestJson(url.toString()));
-      const steam = raw.response.players[0];
-      return steam
-        ? {
-            ...profile,
-            name: steam.personaname,
-            avatar: steam.avatarfull ?? profile.avatar,
-          }
-        : profile;
-    });
+    const steam = await cached(
+      `steam-profile:${id}`,
+      async () => {
+        const url = new URL(
+          "https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/",
+        );
+        url.search = new URLSearchParams({
+          key: process.env.STEAM_API_KEY!,
+          steamids: String(BigInt(id) + 76561197960265728n),
+        }).toString();
+        const raw = z
+          .object({
+            response: z.object({
+              players: z.array(
+                z.object({
+                  personaname: z.string(),
+                  avatarfull: z.string().optional(),
+                }),
+              ),
+            }),
+          })
+          .parse(await requestJson(url.toString()));
+        return raw.response.players[0] ?? null;
+      },
+      PLAYER_TTL,
+      refresh,
+    );
+    return steam
+      ? {
+          ...profile,
+          name: steam.personaname,
+          avatar: steam.avatarfull ?? profile.avatar,
+        }
+      : profile;
   } catch {
     return profile;
   }

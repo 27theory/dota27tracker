@@ -26,6 +26,17 @@ export interface MatchPlayer {
   towerDamage: number;
   healing: number;
   wards: number | null;
+  smokes?: number | null;
+  dusts?: number | null;
+  teamfightParticipation?: number | null;
+  lh10?: number | null;
+  dn10?: number | null;
+  lh20?: number | null;
+  dn20?: number | null;
+  gold10?: number | null;
+  xp10?: number | null;
+  deathsBefore15m?: number | null;
+  deathsAfter35m?: number | null;
   imp: number | null;
   items: number[];
   neutralItem: number | null;
@@ -58,6 +69,7 @@ export interface PlayerProfile {
   heroes: { heroId: number; games: number; wins: number }[];
   source: Source;
   private: boolean;
+  hasMore?: boolean;
   notice?: string;
 }
 export interface PlayerMatch {
@@ -75,6 +87,13 @@ export interface PlayerMatch {
   lane: string | null;
   duration: number;
   startTime: number;
+}
+export interface AiCoachReport {
+  verdict: string;
+  laning: string;
+  build: string;
+  mistakes: string[];
+  nextGamePlan: string[];
 }
 export interface Session {
   accountId: number;

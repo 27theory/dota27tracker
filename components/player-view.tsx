@@ -1,20 +1,26 @@
 "use client";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
   Activity,
   ArrowRight,
+  ChevronDown,
   ChevronRight,
   Coins,
+  LoaderCircle,
   RefreshCw,
   Shield,
   Trophy,
   UserRound,
 } from "lucide-react";
-import type { PlayerProfile } from "@/lib/types";
+import type { PlayerMatch, PlayerProfile } from "@/lib/types";
 import { ago, heroName, roles, time } from "@/lib/format";
-import { HeroPortrait, ImpactBar, Skeleton } from "./ui";
+import { HeroPortrait, ImpactBar, ProfileSkeleton } from "./ui";
 import { useData } from "./use-data";
 import { ErrorState } from "./error-state";
+
+const INITIAL_LIMIT = 150;
+const PAGE_STEP = 50;
 
 export function PlayerView({ id }: { id: string }) {
   const {
@@ -22,11 +28,63 @@ export function PlayerView({ id }: { id: string }) {
     error,
     loading,
     refresh,
-  } = useData<PlayerProfile>(`/api/players/${id}`);
-  if (loading && !p) return <Skeleton />;
+  } = useData<PlayerProfile>(
+    `/api/players/${id}?offset=0&limit=${INITIAL_LIMIT}`,
+  );
+  const [extraMatches, setExtraMatches] = useState<PlayerMatch[]>([]);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState("");
+
+  useEffect(() => {
+    setExtraMatches([]);
+    setMoreError("");
+    setHasMore(Boolean(p?.hasMore ?? (p ? p.matches.length >= INITIAL_LIMIT : false)));
+  }, [p]);
+
+  if (loading && !p) return <ProfileSkeleton />;
   if (error && !p) return <ErrorState message={error} retry={refresh} />;
   if (!p) return null;
-  const ms = p.matches;
+
+  const ms = [...p.matches, ...extraMatches];
+
+  async function handleRefresh() {
+    setExtraMatches([]);
+    setMoreError("");
+    await refresh();
+  }
+
+  async function loadMore() {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    setMoreError("");
+    try {
+      const offset = ms.length;
+      const r = await fetch(
+        `/api/players/${id}?offset=${offset}&limit=${PAGE_STEP}`,
+      );
+      const next: PlayerProfile & { error?: string } = await r.json();
+      if (!r.ok) throw new Error(next.error ?? "Не удалось загрузить матчи");
+      const batch = next.matches ?? [];
+      setExtraMatches((prev) => {
+        const existing = new Set(
+          [...p!.matches, ...prev].map((m) => `${m.id}:${m.startTime}`),
+        );
+        const unique = batch.filter(
+          (m) => !existing.has(`${m.id}:${m.startTime}`),
+        );
+        return [...prev, ...unique];
+      });
+      setHasMore(Boolean(next.hasMore ?? batch.length >= PAGE_STEP));
+    } catch (e) {
+      setMoreError(
+        e instanceof Error ? e.message : "Ошибка подгрузки матчей",
+      );
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
   const avg = (key: "gpm" | "xpm" | "imp") => {
     const vals = ms.map((m) => m[key]).filter((v): v is number => v !== null);
     return vals.length
@@ -95,10 +153,9 @@ export function PlayerView({ id }: { id: string }) {
         <button
           disabled={loading}
           className="button button-ghost shrink-0"
-          onClick={refresh}
+          onClick={handleRefresh}
         >
           <RefreshCw size={14} className={loading ? "spin" : ""} /> Обновить
-          данные
         </button>
       </div>
       <div className="stat-grid">
@@ -229,7 +286,7 @@ export function PlayerView({ id }: { id: string }) {
               </thead>
               <tbody>
                 {ms.map((m, i) => (
-                  <tr key={`${m.id}-${i}`}>
+                  <tr key={`${m.id}-${m.startTime}-${i}`}>
                     <td className="min-w-[160px] max-w-[200px] px-3">
                       <Link
                         className="player-cell gap-3 account-link min-w-0"
@@ -297,6 +354,32 @@ export function PlayerView({ id }: { id: string }) {
               </tbody>
             </table>
           </div>
+          {moreError && (
+            <div className="notice error mt-4" role="alert">
+              {moreError}
+            </div>
+          )}
+          {hasMore && (
+            <div className="mt-6 flex justify-center">
+              <button
+                type="button"
+                disabled={loadingMore}
+                onClick={loadMore}
+                className="button button-ghost"
+              >
+                {loadingMore ? (
+                  <>
+                    <LoaderCircle size={15} className="spin" /> Загружаем ещё{" "}
+                    {PAGE_STEP} матчей…
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown size={15} /> Загрузить ещё
+                  </>
+                )}
+              </button>
+            </div>
+          )}
         </>
       )}
     </div>

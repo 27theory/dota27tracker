@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+
 export function useData<T>(url: string) {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState("");
@@ -13,7 +14,8 @@ export function useData<T>(url: string) {
       setLoading(true);
       setError("");
       try {
-        const r = await fetch(`${url}${refresh ? "?refresh=1" : ""}`, {
+        const sep = url.includes("?") ? "&" : "?";
+        const r = await fetch(`${url}${refresh ? `${sep}refresh=1` : ""}`, {
           signal: c.signal,
         });
         const result = await r.json();

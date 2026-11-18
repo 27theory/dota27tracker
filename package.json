@@ -11,6 +11,7 @@
     "format": "prettier --write app components lib/*.ts tests *.ts *.js *.json"
   },
   "dependencies": {
+    "@upstash/redis": "^1.41.0",
     "jose": "^6.0.0",
     "lucide-react": "^0.468.0",
     "next": "^16.4.6",

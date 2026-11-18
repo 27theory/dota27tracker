@@ -16,7 +16,7 @@ import {
 import type { Match, MatchPlayer, Team } from "@/lib/types";
 import { heroName, number, roles, time } from "@/lib/format";
 import { analyzeImpact, type Impact } from "@/lib/impact-analyzer";
-import { HeroPortrait, ImpactBar, ItemIcon, Skeleton } from "./ui";
+import { HeroPortrait, ImpactBar, ItemIcon, MatchSkeleton } from "./ui";
 import { useData } from "./use-data";
 import { ErrorState } from "./error-state";
 import { AiCoach } from "./ai-coach";
@@ -35,7 +35,7 @@ export function MatchView({ id }: { id: string }) {
     () => (m ? analyzeImpact(m) : new Map<MatchPlayer, Impact>()),
     [m],
   );
-  if (loading && !m) return <Skeleton />;
+  if (loading && !m) return <MatchSkeleton />;
   if (error && !m) return <ErrorState message={error} retry={refresh} />;
   if (!m) return null;
   const winners = m.players.filter(

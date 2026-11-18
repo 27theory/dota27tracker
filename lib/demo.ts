@@ -13,50 +13,70 @@ const specs = [
   [66, "Seleri", 91730177, 5, 3, 5, 13, 268, 366, 10900, 11100, 180, -12],
 ] as const;
 export function demoMatch(): Match {
-  const players: MatchPlayer[] = specs.map((s, i) => ({
-    heroId: s[0],
-    name: s[1],
-    accountId: s[2],
-    role: s[3],
-    team: i < 5 ? "radiant" : "dire",
-    kills: s[4],
-    deaths: s[5],
-    assists: s[6],
-    gpm: s[7],
-    xpm: s[8],
-    networth: s[9],
-    heroDamage: s[10],
-    towerDamage: s[11],
-    imp: s[12],
-    lastHits: i % 5 < 3 ? 280 + i * 9 : 32 + i * 2,
-    denies: 8 + i,
-    healing: i % 5 === 4 ? 6400 : 0,
-    wards: i % 5 >= 3 ? 14 : 0,
-    lane: s[3] === 2 ? "Мид" : s[3] === 3 || s[3] === 4 ? "Сложная" : "Легкая",
-    laneOutcome: i < 5 ? "победа" : "поражение",
-    items:
-      i % 5 === 0
-        ? [145, 116, 147, 208, 63, 139]
-        : i % 5 === 1
-          ? [48, 116, 108, 29, 119, 1]
-          : [180, 36, 79, 254, 218, 1],
-    neutralItem: 359,
-    purchases:
-      i % 5 === 0
-        ? [
-            { id: 145, name: "Battle Fury", time: 800 + i * 17 },
-            { id: 116, name: "Black King Bar", time: 1330 + i * 40 },
-          ]
-        : i % 5 <= 2
+  const players: MatchPlayer[] = specs.map((s, i) => {
+    const isRadiant = i < 5;
+    const teamKills = isRadiant ? 40 : 25;
+    const core = s[3] <= 3;
+    return {
+      heroId: s[0],
+      name: s[1],
+      accountId: s[2],
+      role: s[3],
+      team: isRadiant ? "radiant" : "dire",
+      kills: s[4],
+      deaths: s[5],
+      assists: s[6],
+      gpm: s[7],
+      xpm: s[8],
+      networth: s[9],
+      heroDamage: s[10],
+      towerDamage: s[11],
+      imp: s[12],
+      lastHits: i % 5 < 3 ? 280 + i * 9 : 32 + i * 2,
+      denies: 8 + i,
+      healing: i % 5 === 4 ? 6400 : 0,
+      wards: i % 5 >= 3 ? 14 : 0,
+      smokes: i % 5 >= 3 ? 4 : 1,
+      dusts: i % 5 >= 3 ? 6 : 0,
+      teamfightParticipation: Math.round(((s[4] + s[6]) / teamKills) * 100),
+      lh10: core ? (isRadiant ? 68 - (i % 3) * 8 : 52 - (i % 3) * 9) : 12,
+      dn10: core ? (isRadiant ? 14 - (i % 3) * 3 : 7 - (i % 3) * 2) : 3,
+      lh20: core ? (isRadiant ? 168 - (i % 3) * 18 : 124 - (i % 3) * 16) : 28,
+      dn20: core ? (isRadiant ? 22 - (i % 3) * 4 : 11 - (i % 3) * 2) : 5,
+      gold10: core ? (isRadiant ? 4850 - (i % 3) * 350 : 3950 - (i % 3) * 420) : 2450,
+      xp10: core ? (isRadiant ? 5200 - (i % 3) * 300 : 4400 - (i % 3) * 350) : 2700,
+      deathsBefore15m: isRadiant ? (i % 5 >= 3 ? 2 : 1) : i === 7 ? 5 : 2,
+      deathsAfter35m: isRadiant ? 1 : i === 7 ? 4 : 2,
+      lane:
+        s[3] === 2 ? "Мид" : s[3] === 3 || s[3] === 4 ? "Сложная" : "Легкая",
+      laneOutcome: isRadiant ? "победа" : "поражение",
+      items:
+        i % 5 === 0
+          ? [145, 116, 147, 208, 63, 139]
+          : i % 5 === 1
+            ? [48, 116, 108, 29, 119, 1]
+            : [180, 36, 79, 254, 218, 1],
+      neutralItem: 359,
+      purchases:
+        i % 5 === 0
           ? [
-              { id: 1, name: "Blink Dagger", time: 740 + i * 17 },
+              { id: 145, name: "Battle Fury", time: 800 + i * 17 },
+              { id: 147, name: "Manta Style", time: 1120 + i * 25 },
               { id: 116, name: "Black King Bar", time: 1330 + i * 40 },
+              { id: 208, name: "Abyssal Blade", time: 1890 + i * 30 },
             ]
-          : [
-              { id: 254, name: "Glimmer Cape", time: 1100 + i * 17 },
-              { id: 102, name: "Force Staff", time: 1600 + i * 40 },
-            ],
-  }));
+          : i % 5 <= 2
+            ? [
+                { id: 1, name: "Blink Dagger", time: 740 + i * 17 },
+                { id: 108, name: "Aghanim's Scepter", time: 1090 + i * 20 },
+                { id: 116, name: "Black King Bar", time: 1330 + i * 40 },
+              ]
+            : [
+                { id: 254, name: "Glimmer Cape", time: 1100 + i * 17 },
+                { id: 102, name: "Force Staff", time: 1600 + i * 40 },
+              ],
+    };
+  });
   return {
     id: DEMO_ID,
     duration: 2418,
@@ -83,8 +103,10 @@ export function demoMatch(): Match {
     ),
   };
 }
-export function demoProfile(): PlayerProfile {
+export function demoProfile(offset = 0, limit = 150): PlayerProfile {
   const match = demoMatch();
+  const totalDemo = 250;
+  const count = Math.max(0, Math.min(limit, totalDemo - offset));
   return {
     accountId: 321580662,
     name: "Yatoro",
@@ -94,25 +116,29 @@ export function demoProfile(): PlayerProfile {
     losses: 875,
     source: "demo",
     private: false,
+    hasMore: offset + count < totalDemo,
     heroes: [
       { heroId: 44, games: 128, wins: 82 },
       { heroId: 1, games: 96, wins: 59 },
       { heroId: 8, games: 84, wins: 51 },
     ],
-    matches: Array.from({ length: 20 }, (_, i) => ({
-      id: DEMO_ID,
-      heroId: [44, 1, 8, 10, 67, 44, 6][i % 7],
-      won: i % 4 !== 2,
-      kills: 18 - (i % 11),
-      deaths: 3 + (i % 7),
-      assists: 12 + (i % 9),
-      gpm: 782 - i * 11,
-      xpm: 844 - i * 8,
-      imp: 42 - i * 3,
-      role: 1,
-      lane: "Легкая",
-      duration: match.duration - i * 22,
-      startTime: match.startTime - i * 5300,
-    })),
+    matches: Array.from({ length: count }, (_, idx) => {
+      const i = offset + idx;
+      return {
+        id: DEMO_ID,
+        heroId: [44, 1, 8, 10, 67, 44, 6][i % 7],
+        won: i % 4 !== 2,
+        kills: 18 - (i % 11),
+        deaths: 3 + (i % 7),
+        assists: 12 + (i % 9),
+        gpm: 782 - (i % 20) * 11,
+        xpm: 844 - (i % 20) * 8,
+        imp: 42 - (i % 25) * 3,
+        role: 1,
+        lane: "Легкая",
+        duration: match.duration - (i % 18) * 22,
+        startTime: match.startTime - i * 5300,
+      };
+    }),
   };
 }

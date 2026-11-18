@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requestJson, DataError, clearCache } from "@/lib/dota-api";
 import { apiError, guardMutation } from "@/lib/http";
+
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -13,7 +14,7 @@ export async function POST(
     await requestJson(`https://api.opendota.com/api/request/${id}`, {
       method: "POST",
     });
-    clearCache(`match:${id}`);
+    await clearCache(`match:${id}`);
     return NextResponse.json({
       message:
         "Матч поставлен в очередь OpenDota. Обновите данные через 1–2 минуты.",
