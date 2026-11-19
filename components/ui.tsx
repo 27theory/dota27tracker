@@ -39,7 +39,7 @@ export function ImpactBar({
   estimated?: boolean;
 }) {
   return (
-    <div className="impact-wrap">
+    <div className="impact-wrap tabular-nums">
       <span className={score >= 0 ? "text-emerald-400" : "text-rose-400"}>
         {estimated ? "≈ " : ""}
         {score > 0 ? "+" : ""}
@@ -49,7 +49,7 @@ export function ImpactBar({
         <i
           style={{
             width: `${Math.abs(score)}%`,
-            background: score >= 0 ? "#50c99f" : "#e47685",
+            background: score >= 0 ? "#61c6a0" : "#e77c8e",
           }}
         />
       </div>
@@ -60,31 +60,30 @@ export function ImpactBar({
 export function ProfileSkeleton() {
   return (
     <div className="page-shell animate-pulse" aria-busy="true">
-      <div className="skeleton h-4 w-48 mb-6" />
-      <div className="flex items-center justify-between gap-4 mb-7 flex-wrap">
-        <div className="flex items-center gap-5">
-          <div className="skeleton w-20 h-20 rounded-[9px]" />
-          <div className="space-y-2.5">
-            <div className="skeleton h-3 w-36" />
-            <div className="skeleton h-8 w-52" />
-            <div className="skeleton h-4 w-28" />
+      <div className="skeleton h-3.5 w-44 mb-4" />
+      <div className="flex items-center justify-between gap-4 mb-5 flex-wrap">
+        <div className="flex items-center gap-4">
+          <div className="skeleton w-14 h-14 rounded" />
+          <div className="space-y-2">
+            <div className="skeleton h-6 w-48" />
+            <div className="skeleton h-3.5 w-32" />
           </div>
         </div>
-        <div className="skeleton h-10 w-36" />
+        <div className="skeleton h-8 w-28" />
       </div>
       <div className="stat-grid">
         {[1, 2, 3, 4, 5, 6].map((n) => (
-          <div className="skeleton h-28" key={n} />
+          <div className="skeleton h-20" key={n} />
         ))}
       </div>
-      <div className="skeleton h-6 w-48 mb-4" />
-      <div className="flex gap-3 mb-7 overflow-hidden">
+      <div className="skeleton h-5 w-40 mb-3" />
+      <div className="flex gap-2.5 mb-5 overflow-hidden">
         {[1, 2, 3].map((n) => (
-          <div className="skeleton h-14 w-48 shrink-0" key={n} />
+          <div className="skeleton h-12 w-44 shrink-0" key={n} />
         ))}
       </div>
-      <div className="skeleton h-6 w-44 mb-4" />
-      <div className="skeleton h-96 w-full" />
+      <div className="skeleton h-5 w-40 mb-3" />
+      <div className="skeleton h-80 w-full" />
     </div>
   );
 }
@@ -92,26 +91,25 @@ export function ProfileSkeleton() {
 export function MatchSkeleton() {
   return (
     <div className="page-shell animate-pulse" aria-busy="true">
-      <div className="skeleton h-4 w-52 mb-6" />
-      <div className="flex items-center justify-between gap-4 mb-7 flex-wrap">
-        <div className="space-y-3">
-          <div className="skeleton h-3 w-40" />
-          <div className="skeleton h-8 w-64" />
-          <div className="skeleton h-9 w-56" />
+      <div className="skeleton h-3.5 w-48 mb-4" />
+      <div className="flex items-center justify-between gap-4 mb-5 flex-wrap">
+        <div className="space-y-2">
+          <div className="skeleton h-6 w-56" />
+          <div className="skeleton h-7 w-64" />
         </div>
         <div className="flex gap-2">
-          <div className="skeleton h-10 w-28" />
-          <div className="skeleton h-10 w-40" />
+          <div className="skeleton h-8 w-24" />
+          <div className="skeleton h-8 w-36" />
         </div>
       </div>
       <div className="highlight-grid">
         {[1, 2, 3, 4].map((n) => (
-          <div className="skeleton h-32" key={n} />
+          <div className="skeleton h-24" key={n} />
         ))}
       </div>
-      <div className="skeleton h-28 w-full mb-7" />
-      <div className="skeleton h-80 w-full mb-7" />
-      <div className="skeleton h-72 w-full" />
+      <div className="skeleton h-20 w-full mb-5" />
+      <div className="skeleton h-72 w-full mb-5" />
+      <div className="skeleton h-64 w-full" />
     </div>
   );
 }

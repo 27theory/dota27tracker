@@ -39,7 +39,9 @@ export function PlayerView({ id }: { id: string }) {
   useEffect(() => {
     setExtraMatches([]);
     setMoreError("");
-    setHasMore(Boolean(p?.hasMore ?? (p ? p.matches.length >= INITIAL_LIMIT : false)));
+    setHasMore(
+      Boolean(p?.hasMore ?? (p ? p.matches.length >= INITIAL_LIMIT : false)),
+    );
   }, [p]);
 
   if (loading && !p) return <ProfileSkeleton />;
@@ -112,8 +114,8 @@ export function PlayerView({ id }: { id: string }) {
       </div>
       {p.source === "demo" && (
         <div className="notice demo">
-          Демонстрационный профиль. Матчи и статистика — синтетические примеры.
-          Для реальных данных найдите игрока на главной.
+          Демонстрационный профиль. Для реальной статистики введите SteamID на
+          главной странице.
         </div>
       )}
       {error && (
@@ -122,7 +124,7 @@ export function PlayerView({ id }: { id: string }) {
         </div>
       )}
       <div className="page-top">
-        <div className="flex items-center gap-5 min-w-0">
+        <div className="flex items-center gap-4 min-w-0">
           {p.avatar ? (
             <img
               src={p.avatar}
@@ -135,19 +137,27 @@ export function PlayerView({ id }: { id: string }) {
             </div>
           )}
           <div className="min-w-0">
-            <div className="eyebrow subtle">ПРОФИЛЬ ИГРОКА · {p.accountId}</div>
-            <h1 className="page-title truncate" title={p.name}>
-              {p.name}
-            </h1>
-            <div className="rank-badge">
-              <Shield size={16} /> {p.rank}
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h1 className="page-title truncate" title={p.name}>
+                {p.name}
+              </h1>
+              <span className="tag muted tabular-nums">ID {p.accountId}</span>
             </div>
-            {p.wins !== null && p.losses !== null && p.wins + p.losses > 0 && (
-              <p>
-                {p.wins} побед · {p.losses} поражений ·{" "}
-                {Math.round((p.wins / (p.wins + p.losses)) * 100)}% за всё время
-              </p>
-            )}
+            <div className="flex items-center gap-3 flex-wrap mt-1.5 text-xs tabular-nums">
+              <span className="rank-badge">
+                <Shield size={13} /> {p.rank}
+              </span>
+              {p.wins !== null &&
+                p.losses !== null &&
+                p.wins + p.losses > 0 && (
+                  <span className="muted">
+                    <span className="green">{p.wins}W</span> ·{" "}
+                    <span className="red">{p.losses}L</span> ·{" "}
+                    {Math.round((p.wins / (p.wins + p.losses)) * 100)}% за всё
+                    время
+                  </span>
+                )}
+            </div>
           </div>
         </div>
         <button
@@ -155,34 +165,34 @@ export function PlayerView({ id }: { id: string }) {
           className="button button-ghost shrink-0"
           onClick={handleRefresh}
         >
-          <RefreshCw size={14} className={loading ? "spin" : ""} /> Обновить
+          <RefreshCw size={13} className={loading ? "spin" : ""} /> Обновить
         </button>
       </div>
-      <div className="stat-grid">
+      <div className="stat-grid tabular-nums">
         {[
           {
             label: "Винрейт",
             value: ms.length ? `${Math.round((wins / ms.length) * 100)}%` : "—",
-            sub: `${wins} побед · ${ms.length - wins} поражений`,
+            sub: `${wins}W · ${ms.length - wins}L (${ms.length})`,
             icon: Trophy,
             gold: true,
           },
           {
             label: "Средний KDA",
             value: ms.length ? kda.toFixed(2) : "—",
-            sub: "(Убийства + помощь) / смерти",
+            sub: "(K + A) / D",
             icon: UserRound,
           },
           {
             label: "Средний GPM",
             value: avg("gpm") ?? "—",
-            sub: "Золото в минуту",
+            sub: "Золото / мин",
             icon: Coins,
           },
           {
             label: "Средний XPM",
             value: avg("xpm") ?? "—",
-            sub: "Опыт в минуту",
+            sub: "Опыт / мин",
             icon: Activity,
           },
           {
@@ -191,43 +201,41 @@ export function PlayerView({ id }: { id: string }) {
               avg("imp") !== null
                 ? `${avg("imp")! > 0 ? "+" : ""}${avg("imp")}`
                 : "—",
-            sub:
-              avg("imp") === null ? "Недоступен в OpenDota" : "Оценка STRATZ",
+            sub: avg("imp") === null ? "Нет в OpenDota" : "STRATZ IMP",
             icon: Activity,
           },
           {
-            label: "Любимая роль",
+            label: "Основная роль",
             value: favorite ? roles[favorite] : "—",
-            sub: "По доступным позициям",
+            sub: "По истории матчей",
             icon: Shield,
           },
         ].map((s) => (
           <div className="stat-card" key={s.label}>
             <span className="stat-label">
-              <s.icon size={13} />
+              <s.icon size={12} />
               {s.label}
             </span>
             <strong
-              className={s.gold ? "gold" : ""}
-              style={s.label === "Любимая роль" ? { fontSize: 21 } : undefined}
+              className={`tabular-nums ${s.gold ? "gold" : ""}`}
+              style={s.label === "Основная роль" ? { fontSize: 18 } : undefined}
             >
               {s.value}
             </strong>
-            <small>{s.sub}</small>
+            <small className="tabular-nums">{s.sub}</small>
           </div>
         ))}
       </div>
       {p.private ? (
         <div className="panel">
           <h2>Нет доступной истории матчей</h2>
-          <p className="muted text-sm leading-7 mt-3">
-            История может быть скрыта или ещё не загружена. В Dota 2 откройте{" "}
+          <p className="muted text-xs leading-6 mt-2">
+            История скрыта или ещё не загружена. В Dota 2 откройте{" "}
             <b>
               Настройки → Сообщество → «Общедоступная история матчей» (Expose
               Public Match Data)
             </b>
-            . После новой игры обновите страницу. Старые закрытые матчи могут
-            остаться недоступны.
+            .
           </p>
         </div>
       ) : (
@@ -238,7 +246,7 @@ export function PlayerView({ id }: { id: string }) {
               {p.source === "demo" ? "Демо" : "За всё время"}
             </span>
           </div>
-          <div className="signature-list">
+          <div className="signature-list tabular-nums">
             {p.heroes.map((h) => (
               <div className="signature" key={h.heroId}>
                 <HeroPortrait id={h.heroId} />
@@ -247,8 +255,7 @@ export function PlayerView({ id }: { id: string }) {
                   <p>
                     {h.games} игр ·{" "}
                     <span className="green">
-                      {h.games ? Math.round((h.wins / h.games) * 100) : 0}%
-                      побед
+                      {h.games ? Math.round((h.wins / h.games) * 100) : 0}% WR
                     </span>
                   </p>
                 </div>
@@ -257,7 +264,8 @@ export function PlayerView({ id }: { id: string }) {
           </div>
           <div className="section-heading">
             <h2>
-              Последние матчи <span className="text-sm ml-2">{ms.length}</span>
+              История матчей{" "}
+              <span className="text-xs ml-1.5 tabular-nums">({ms.length})</span>
             </h2>
             <span className="muted text-[10px]">
               Источник:{" "}
@@ -269,18 +277,18 @@ export function PlayerView({ id }: { id: string }) {
             </span>
           </div>
           <div className="table-scroll overflow-x-auto w-full max-w-full">
-            <table className="min-w-[680px]">
+            <table className="min-w-[680px] tabular-nums">
               <thead>
                 <tr>
                   <th className="min-w-[160px] max-w-[200px] px-3">
-                    ГЕРОЙ / РЕЗУЛЬТАТ
+                    ГЕРОЙ / ИТОГ
                   </th>
                   <th className="px-3">РОЛЬ / ЛАЙН</th>
                   <th className="px-3">K / D / A</th>
                   <th className="px-3">GPM / XPM</th>
-                  <th className="px-3">IMPACT</th>
-                  <th className="px-3">ДЛИТЕЛЬНОСТЬ</th>
-                  <th className="px-3">КОГДА</th>
+                  <th className="px-3">IMP</th>
+                  <th className="px-3">ВРЕМЯ</th>
+                  <th className="px-3">ДАТА</th>
                   <th className="px-3" />
                 </tr>
               </thead>
@@ -289,7 +297,7 @@ export function PlayerView({ id }: { id: string }) {
                   <tr key={`${m.id}-${m.startTime}-${i}`}>
                     <td className="min-w-[160px] max-w-[200px] px-3">
                       <Link
-                        className="player-cell gap-3 account-link min-w-0"
+                        className="player-cell gap-2.5 account-link min-w-0"
                         href={`/match/${m.id}`}
                       >
                         <HeroPortrait id={m.heroId} className="shrink-0" />
@@ -306,9 +314,9 @@ export function PlayerView({ id }: { id: string }) {
                       </Link>
                     </td>
                     <td className="px-3 whitespace-nowrap">
-                      {m.role ? roles[m.role] : "Неизвестно"}
-                      <small className="block dim mt-1">
-                        {m.lane ?? "Нет данных"}
+                      {m.role ? roles[m.role] : "—"}
+                      <small className="block dim mt-0.5">
+                        {m.lane ?? "—"}
                       </small>
                     </td>
                     <td className="px-3 whitespace-nowrap">
@@ -325,13 +333,13 @@ export function PlayerView({ id }: { id: string }) {
                         <>
                           <ImpactBar score={m.imp} />
                           {m.badge && (
-                            <small className="block text-[8px] muted mt-1">
+                            <small className="block text-[8px] muted mt-0.5">
                               {m.badge}
                             </small>
                           )}
                         </>
                       ) : (
-                        <span className="dim">Нет IMP</span>
+                        <span className="dim">—</span>
                       )}
                     </td>
                     <td className="px-3 whitespace-nowrap">
@@ -346,7 +354,7 @@ export function PlayerView({ id }: { id: string }) {
                         aria-label={`Разобрать матч ${m.id}`}
                         className="icon-button inline-flex"
                       >
-                        <ArrowRight size={13} />
+                        <ArrowRight size={12} />
                       </Link>
                     </td>
                   </tr>
@@ -355,26 +363,26 @@ export function PlayerView({ id }: { id: string }) {
             </table>
           </div>
           {moreError && (
-            <div className="notice error mt-4" role="alert">
+            <div className="notice error mt-3" role="alert">
               {moreError}
             </div>
           )}
           {hasMore && (
-            <div className="mt-6 flex justify-center">
+            <div className="mt-4 flex justify-center">
               <button
                 type="button"
                 disabled={loadingMore}
                 onClick={loadMore}
-                className="button button-ghost"
+                className="button button-ghost tabular-nums"
               >
                 {loadingMore ? (
                   <>
-                    <LoaderCircle size={15} className="spin" /> Загружаем ещё{" "}
+                    <LoaderCircle size={14} className="spin" /> Загружаем ещё{" "}
                     {PAGE_STEP} матчей…
                   </>
                 ) : (
                   <>
-                    <ChevronDown size={15} /> Загрузить ещё
+                    <ChevronDown size={14} /> Загрузить ещё {PAGE_STEP}
                   </>
                 )}
               </button>

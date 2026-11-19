@@ -4,14 +4,13 @@ import { usePathname } from "next/navigation";
 import {
   ArrowUpRight,
   ChartNoAxesCombined,
-  ChevronDown,
-  Globe2,
   Menu,
   Swords,
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Session } from "@/lib/types";
+
 export function Header() {
   const path = usePathname();
   const [session, setSession] = useState<Session | null>(null);
@@ -27,11 +26,10 @@ export function Header() {
       <div className="header-inner">
         <Link href="/" className="brand" aria-label="DotaScope — главная">
           <span className="brand-mark">
-            <Swords size={23} />
+            <Swords size={17} />
           </span>
           <span>
             DOTA<span className="brand-light">SCOPE</span>
-            <sup> BETA</sup>
           </span>
         </Link>
         <nav
@@ -43,7 +41,7 @@ export function Header() {
             href="/"
             onClick={() => setMenu(false)}
           >
-            Обзор
+            Трекер
           </Link>
           <Link
             className={path.startsWith("/player") ? "active" : ""}
@@ -57,20 +55,17 @@ export function Header() {
             href="/match/demo"
             onClick={() => setMenu(false)}
           >
-            Анализ матча <span className="mini-ai">AI</span>
+            Разбор матча
           </Link>
         </nav>
         <div className="header-actions">
-          <span className="language">
-            <Globe2 size={14} /> RU <ChevronDown size={12} />
-          </span>
           {session ? (
             <>
               <Link
-                className="steam-small"
+                className="steam-small tabular-nums"
                 href={`/player/${session.accountId}`}
               >
-                Мой профиль
+                Профиль #{session.accountId}
               </Link>
               <a className="muted text-xs" href="/api/auth/logout">
                 Выйти
@@ -78,7 +73,7 @@ export function Header() {
             </>
           ) : (
             <a className="steam-small" href="/api/auth/steam">
-              <SteamIcon /> Войти через Steam <ArrowUpRight size={14} />
+              <SteamIcon /> Войти через Steam <ArrowUpRight size={13} />
             </a>
           )}
           <button
@@ -86,18 +81,19 @@ export function Header() {
             onClick={() => setMenu(!menu)}
             aria-label="Меню"
           >
-            {menu ? <X /> : <Menu />}
+            {menu ? <X size={16} /> : <Menu size={16} />}
           </button>
         </div>
       </div>
     </header>
   );
 }
+
 export function SteamIcon() {
   return (
     <svg
-      width="19"
-      height="19"
+      width="16"
+      height="16"
       viewBox="0 0 24 24"
       fill="currentColor"
       aria-hidden="true"
@@ -106,17 +102,18 @@ export function SteamIcon() {
     </svg>
   );
 }
+
 export function Footer() {
   return (
     <footer className="footer">
       <div className="flex items-center gap-2">
-        <ChartNoAxesCombined size={17} />
+        <ChartNoAxesCombined size={15} />
         <span>
-          DotaScope <span className="dim">© 2026</span>
+          DotaScope <span className="dim">2026</span>
         </span>
       </div>
       <span>
-        Powered by{" "}
+        Телеметрия:{" "}
         <a href="https://stratz.com" target="_blank" rel="noreferrer">
           STRATZ
         </a>{" "}
@@ -125,7 +122,6 @@ export function Footer() {
           OpenDota API
         </a>
       </span>
-      <span className="dim">Сделано для тех, кто хочет играть лучше.</span>
     </footer>
   );
 }

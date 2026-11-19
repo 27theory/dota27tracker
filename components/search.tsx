@@ -3,11 +3,12 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
-  Search,
   LoaderCircle,
-  UserRound,
+  Search,
   Swords,
+  UserRound,
 } from "lucide-react";
+
 export function SearchBox() {
   const [kind, setKind] = useState<"player" | "match">("player");
   const [value, setValue] = useState("");
@@ -34,27 +35,31 @@ export function SearchBox() {
     <div className="search-card">
       <div className="search-tabs">
         <button
+          type="button"
           className={kind === "player" ? "selected" : ""}
           onClick={() => {
             setKind("player");
             setError("");
           }}
         >
-          <UserRound size={15} /> Найти игрока
+          <UserRound size={14} /> Игрок (SteamID / URL)
         </button>
         <button
+          type="button"
           className={kind === "match" ? "selected" : ""}
           onClick={() => {
             setKind("match");
             setError("");
           }}
         >
-          <Swords size={15} /> Найти матч
+          <Swords size={14} /> Матч (Match ID)
         </button>
-        <span className="search-hint">Для анализа не нужен аккаунт</span>
+        <span className="search-hint tabular-nums">
+          SteamID32 · SteamID64 · steamcommunity.com
+        </span>
       </div>
       <form onSubmit={search} className="search-form">
-        <Search size={21} className="muted" />
+        <Search size={16} className="muted" />
         <input
           aria-label={
             kind === "player" ? "Steam ID или ссылка на профиль" : "Match ID"
@@ -65,16 +70,16 @@ export function SearchBox() {
           maxLength={200}
           placeholder={
             kind === "player"
-              ? "Steam ID, SteamID64 или ссылка на профиль"
-              : "Введите Match ID, например 8123456789"
+              ? "321580662, 76561198281846390 или ссылка на профиль Steam"
+              : "Match ID, например 8123456789"
           }
         />
         <button className="button button-gold" disabled={busy}>
           {busy ? (
-            <LoaderCircle className="spin" size={18} />
+            <LoaderCircle className="spin" size={15} />
           ) : (
             <>
-              Анализировать <ArrowRight size={17} />
+              Найти <ArrowRight size={14} />
             </>
           )}
         </button>
@@ -84,10 +89,6 @@ export function SearchBox() {
           {error}
         </p>
       )}
-      <p className="search-note">
-        SteamID32 / SteamID64 / steamcommunity.com/profiles/…{" "}
-        <span>Открытые профили · Бесплатно</span>
-      </p>
     </div>
   );
 }

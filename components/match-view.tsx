@@ -77,13 +77,14 @@ export function MatchView({ id }: { id: string }) {
       <div className="breadcrumb">
         <Link href="/">Обзор</Link>
         <ChevronRight size={12} /> Анализ матча <ChevronRight size={12} />{" "}
-        {m.id === "demo" ? "Демоматч" : `#${m.id}`}
+        <span className="tabular-nums">
+          {m.id === "demo" ? "Демоматч" : `#${m.id}`}
+        </span>
       </div>
       {m.source === "demo" && (
         <div className="notice demo">
-          Демонстрационный матч: синтетические данные для знакомства с
-          аналитикой. Имена используются как примеры, оценки не относятся к
-          реальным играм.
+          Демонстрационный матч: синтетические данные для проверки таблиц и
+          оценок импакта.
         </div>
       )}
       {m.notice && <div className="notice">{m.notice}</div>}
@@ -94,30 +95,32 @@ export function MatchView({ id }: { id: string }) {
       )}
       <div className="page-top">
         <div>
-          <div className="eyebrow subtle">
-            {m.mode} ·{" "}
-            {m.source === "demo" ? "ДЕМОНСТРАЦИЯ" : m.source.toUpperCase()}
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <h1 className="page-title tabular-nums">
+              {m.id === "demo" ? "Разбор демоматча" : `Матч #${m.id}`}
+            </h1>
+            <span className="tag gold">
+              {m.mode} ·{" "}
+              {m.source === "demo" ? "DEMO" : m.source.toUpperCase()}
+            </span>
           </div>
-          <h1 className="page-title">
-            {m.id === "demo" ? "Разбор демоматча" : `Матч #${m.id}`}
-          </h1>
-          <div className="match-score">
+          <div className="match-score tabular-nums">
             <span className="green">Radiant</span>
             <b className="green">{m.radiantScore}</b>
             <span className="dim">:</span>
             <b className="red">{m.direScore}</b>
             <span className="red">Dire</span>
-            <span className="dim text-xs ml-3 flex gap-2 items-center">
-              <Clock3 size={13} />
+            <span className="dim text-xs ml-2 flex gap-1.5 items-center">
+              <Clock3 size={12} />
               {time(m.duration)}
             </span>
-          </div>
-          <p className="flex items-center gap-2">
-            <Shield size={12} /> {m.rank} <span className="dim mx-2">·</span>
-            <span className="green">
+            <span className="dim text-xs flex gap-1.5 items-center">
+              <Shield size={12} /> {m.rank}
+            </span>
+            <span className="green text-xs font-medium">
               Победа {m.radiantWin ? "Radiant" : "Dire"}
             </span>
-          </p>
+          </div>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
@@ -125,7 +128,7 @@ export function MatchView({ id }: { id: string }) {
             className="button button-ghost"
             onClick={refresh}
           >
-            <RefreshCw size={14} className={loading ? "spin" : ""} /> Обновить
+            <RefreshCw size={13} className={loading ? "spin" : ""} /> Обновить
           </button>
           {m.source !== "demo" && (
             <button
@@ -133,7 +136,7 @@ export function MatchView({ id }: { id: string }) {
               className="button button-ghost"
               onClick={requestParse}
             >
-              <Download size={14} />{" "}
+              <Download size={13} />{" "}
               {parsing ? "Отправляем…" : "Запросить парсинг"}
             </button>
           )}
@@ -146,16 +149,16 @@ export function MatchView({ id }: { id: string }) {
       )}
       <section id="impact">
         <div className="section-heading">
-          <h2>Вердикт матча</h2>
+          <h2>Сводка импакта</h2>
           <span className="muted text-[10px]">
             {m.source === "demo"
-              ? "Пример оценок импакта"
+              ? "Демо-телеметрия"
               : m.source === "opendota"
-                ? "Оценки ≈ рассчитаны локально"
-                : "На основе STRATZ IMP"}
+                ? "Расчёт ≈ локально"
+                : "STRATZ IMP"}
           </span>
         </div>
-        <div className="highlight-grid">
+        <div className="highlight-grid tabular-nums">
           <PlayerHighlight
             title="MVP МАТЧА"
             player={mvp}
@@ -165,7 +168,7 @@ export function MatchView({ id }: { id: string }) {
           <PlayerHighlight
             title={
               impacts.get(worst)!.badge === "Руинер"
-                ? "RUINER ALERT"
+                ? "КРИТИЧЕСКИЙ СПАД"
                 : "СЛАБОЕ ЗВЕНО"
             }
             player={worst}
@@ -174,7 +177,7 @@ export function MatchView({ id }: { id: string }) {
           />
           {third ? (
             <PlayerHighlight
-              title={under ? "БЛИЗОК К РУИНУ" : "ТАЩИЛ 1v9"}
+              title={under ? "ПРОСАДКА ПО ИМПАКТУ" : "ТАЩИЛ 1v9"}
               player={third}
               impact={impacts.get(third)!}
               kind={under ? "red" : "green"}
@@ -182,7 +185,7 @@ export function MatchView({ id }: { id: string }) {
           ) : (
             <div className="highlight">
               <div className="highlight-title">
-                <Shield size={13} /> СТАБИЛЬНОСТЬ
+                <Shield size={12} /> СТАБИЛЬНОСТЬ
               </div>
               <div className="highlight-value">Без просадок</div>
               <div className="highlight-reason">
@@ -192,26 +195,24 @@ export function MatchView({ id }: { id: string }) {
           )}
           <div className="highlight">
             <div className="highlight-title">
-              <Target size={13} /> КЛЮЧЕВОЙ ФАКТОР
+              <Target size={12} /> УРОН ПО СТРОЕНИЯМ
             </div>
-            <div className="highlight-value gold">
+            <div className="highlight-value gold tabular-nums">
               {number(tower("radiant"))}{" "}
               <span className="dim text-sm">/ {number(tower("dire"))}</span>
             </div>
             <div className="highlight-reason">
-              Урон по строениям · Radiant / Dire
-              <br />
-              Давление на объекты решает.
+              Сумма урона по вышкам · Radiant / Dire
             </div>
           </div>
         </div>
       </section>
       <AiCoach key={m.id} match={m} />
       <section id="teams">
-        <div className="section-heading mt-8">
-          <h2>Детальная статистика</h2>
-          <span className="muted text-[10px]">
-            IMP: −100 — +100 · «—» означает отсутствие данных
+        <div className="section-heading mt-5">
+          <h2>Таблица матча</h2>
+          <span className="muted text-[10px] tabular-nums">
+            IMP: −100 … +100 · «—» нет данных в реплее
           </span>
         </div>
         {(["radiant", "dire"] as Team[]).map((team) => (
@@ -219,7 +220,7 @@ export function MatchView({ id }: { id: string }) {
             <div className="team-heading">
               <Swords
                 className={team === "radiant" ? "green" : "red"}
-                size={19}
+                size={16}
               />
               <h2>{team === "radiant" ? "Radiant" : "Dire"}</h2>
               <span
@@ -233,7 +234,7 @@ export function MatchView({ id }: { id: string }) {
               </span>
             </div>
             <div className="table-scroll overflow-x-auto w-full max-w-full">
-              <table className="min-w-[940px]">
+              <table className="min-w-[940px] tabular-nums">
                 <thead>
                   <tr>
                     <th className="min-w-[160px] max-w-[200px] px-3">
@@ -246,8 +247,8 @@ export function MatchView({ id }: { id: string }) {
                     <th className="px-3">НЕТВОРС</th>
                     <th className="px-3">УРОН / ВЫШКИ</th>
                     <th className="px-3">ЛЕЧЕНИЕ / ВАРДЫ</th>
-                    <th className="px-3">IMPACT</th>
-                    <th className="px-3">ФИНАЛЬНЫЙ БИЛД / ТАЙМИНГИ</th>
+                    <th className="px-3">IMP</th>
+                    <th className="px-3">БИЛД / ТАЙМИНГИ</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -256,7 +257,7 @@ export function MatchView({ id }: { id: string }) {
                     .map((p, i) => (
                       <tr key={i}>
                         <td className="min-w-[160px] max-w-[200px] px-3">
-                          <div className="player-cell gap-3 min-w-0">
+                          <div className="player-cell gap-2.5 min-w-0">
                             <HeroPortrait id={p.heroId} className="shrink-0" />
                             <div className="min-w-0 flex-1">
                               {p.accountId ? (
@@ -281,7 +282,7 @@ export function MatchView({ id }: { id: string }) {
                         <td className="px-3 whitespace-nowrap">
                           {p.role ? roles[p.role] : "—"}
                           <small
-                            className={`block mt-1 text-[9px] ${p.laneOutcome?.includes("победа") ? "green" : p.laneOutcome ? "red" : "dim"}`}
+                            className={`block mt-0.5 text-[9px] ${p.laneOutcome?.includes("победа") ? "green" : p.laneOutcome ? "red" : "dim"}`}
                           >
                             {p.lane ?? "—"}{" "}
                             {p.laneOutcome ? `· ${p.laneOutcome}` : ""}
@@ -319,7 +320,7 @@ export function MatchView({ id }: { id: string }) {
                               {impacts.get(p)!.badge}
                             </span>
                           </div>
-                          <small className="block dim text-[8px] mt-2">
+                          <small className="block dim text-[8px] mt-1">
                             {impacts.get(p)!.reasons[0]}
                           </small>
                         </td>
@@ -332,7 +333,7 @@ export function MatchView({ id }: { id: string }) {
                               <ItemIcon id={p.neutralItem ?? 0} />
                             </span>
                           </div>
-                          <div className="purchase-times">
+                          <div className="purchase-times tabular-nums">
                             {p.purchases
                               .filter((i) =>
                                 [
@@ -364,14 +365,6 @@ export function MatchView({ id }: { id: string }) {
         ))}
       </section>
       <MatchCharts match={m} />
-      <p className="muted text-[10px] leading-6 mt-5">
-        Оценка импакта описывает вклад по доступной статистике и не заменяет
-        просмотр реплея. Отсутствующий лайнинг и позиции не восстанавливаются по
-        догадкам.{" "}
-        {m.source === "opendota"
-          ? "Знак ≈ обозначает локальную эвристику, а не STRATZ IMP."
-          : ""}
-      </p>
     </div>
   );
 }
@@ -393,15 +386,15 @@ function PlayerHighlight({
     >
       <div className={`highlight-title ${kind}`}>
         {kind === "gold" ? (
-          <Trophy size={13} />
+          <Trophy size={12} />
         ) : kind === "red" ? (
-          <Flame size={13} />
+          <Flame size={12} />
         ) : (
-          <Activity size={13} />
+          <Activity size={12} />
         )}{" "}
         {title}
       </div>
-      <div className="player-cell gap-3 min-w-0">
+      <div className="player-cell gap-2.5 min-w-0">
         <HeroPortrait id={p.heroId} className="shrink-0" />
         <div className="min-w-0 flex-1">
           <b className="truncate" title={p.name}>
@@ -409,7 +402,7 @@ function PlayerHighlight({
           </b>
           <small className="truncate">{heroName(p.heroId)}</small>
         </div>
-        <b className={`ml-auto shrink-0 ${kind}`}>
+        <b className={`ml-auto shrink-0 tabular-nums ${kind}`}>
           {impact.estimated ? "≈" : ""}
           {impact.score > 0 ? "+" : ""}
           {impact.score}

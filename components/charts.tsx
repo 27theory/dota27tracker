@@ -18,11 +18,12 @@ import { heroName } from "@/lib/format";
 import { impactScore } from "@/lib/impact-analyzer";
 
 const tooltipStyle = {
-  background: "#1a222c",
-  border: "1px solid #374352",
-  borderRadius: 6,
+  background: "#14191f",
+  border: "1px solid #262c33",
+  borderRadius: 4,
   fontSize: 11,
-  color: "#d1dae4",
+  color: "#eceef0",
+  fontVariantNumeric: "tabular-nums" as const,
 };
 
 const tooltipWrapperStyle = {
@@ -37,13 +38,10 @@ export function MatchCharts({ match: m }: { match: Match }) {
     (lead, minute) => ({ minute, lead }),
   );
   return (
-    <>
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 mt-4 tabular-nums">
       <section className="panel chart-panel overflow-hidden">
         <div className="section-heading">
-          <div>
-            <div className="eyebrow subtle">КАК МЕНЯЛАСЬ ИГРА</div>
-            <h2>График преимущества</h2>
-          </div>
+          <h2>График преимущества</h2>
           <div className="chart-tabs">
             <button
               className={metric === "gold" ? "active" : ""}
@@ -59,43 +57,42 @@ export function MatchCharts({ match: m }: { match: Match }) {
             </button>
           </div>
         </div>
-        <div className="flex gap-5 text-[10px] muted mb-5">
-          <span className="green">● Radiant (выше нуля)</span>
-          <span className="red">● Dire (ниже нуля)</span>
+        <div className="flex gap-4 text-[10px] muted mb-3">
+          <span className="green">● Radiant (&gt; 0)</span>
+          <span className="red">● Dire (&lt; 0)</span>
         </div>
         {data.length ? (
-          <div style={{ height: 270, width: "100%" }}>
+          <div style={{ height: 235, width: "100%" }}>
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart
                 data={data}
-                margin={{ top: 12, right: 18, left: 4, bottom: 8 }}
+                margin={{ top: 8, right: 12, left: 0, bottom: 4 }}
               >
                 <defs>
                   <linearGradient id="lead-fill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#58c89d" stopOpacity={0.3} />
+                    <stop offset="0%" stopColor="#61c6a0" stopOpacity={0.22} />
                     <stop
                       offset="100%"
-                      stopColor="#58c89d"
+                      stopColor="#61c6a0"
                       stopOpacity={0.01}
                     />
                   </linearGradient>
                 </defs>
-                <CartesianGrid stroke="#ffffff07" vertical={false} />
+                <CartesianGrid stroke="#1e252e" vertical={false} />
                 <XAxis
                   dataKey="minute"
                   tickFormatter={(n) => `${n}м`}
-                  stroke="#36424e"
-                  tick={{ fill: "#6c7c8b", fontSize: 10 }}
+                  stroke="#262c33"
+                  tick={{ fill: "#8c929c", fontSize: 10 }}
                   tickLine={false}
-                  tickMargin={6}
+                  tickMargin={5}
                   minTickGap={16}
-                  padding={{ left: 6, right: 10 }}
                 />
                 <YAxis
-                  width={42}
+                  width={40}
                   tickFormatter={(n) => `${Math.round(n / 1000)}k`}
                   stroke="transparent"
-                  tick={{ fill: "#6c7c8b", fontSize: 10 }}
+                  tick={{ fill: "#8c929c", fontSize: 10 }}
                   tickLine={false}
                 />
                 <Tooltip
@@ -108,12 +105,12 @@ export function MatchCharts({ match: m }: { match: Match }) {
                     metric === "gold" ? "Золото R−D" : "Опыт R−D",
                   ]}
                 />
-                <ReferenceLine y={0} stroke="#59606b" strokeDasharray="4 4" />
+                <ReferenceLine y={0} stroke="#38414d" strokeDasharray="3 3" />
                 <Area
                   type="monotone"
                   dataKey="lead"
-                  stroke="#60c8a1"
-                  strokeWidth={2}
+                  stroke="#61c6a0"
+                  strokeWidth={1.75}
                   fill="url(#lead-fill)"
                 />
               </AreaChart>
@@ -127,12 +124,12 @@ export function MatchCharts({ match: m }: { match: Match }) {
       </section>
       <section className="panel chart-panel overflow-hidden">
         <div className="section-heading">
-          <h2>Сравнение импакта</h2>
+          <h2>Распределение IMP</h2>
           <span className="muted text-[10px]">
-            {m.source === "opendota" ? "Локальная оценка ≈" : "STRATZ IMP"}
+            {m.source === "opendota" ? "Оценка ≈" : "STRATZ IMP"}
           </span>
         </div>
-        <div style={{ height: 275, width: "100%" }}>
+        <div style={{ height: 260, width: "100%" }}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={m.players.map((p) => ({
@@ -140,22 +137,22 @@ export function MatchCharts({ match: m }: { match: Match }) {
                 score: impactScore(p),
                 team: p.team,
               }))}
-              margin={{ top: 12, right: 16, left: 4, bottom: 42 }}
+              margin={{ top: 8, right: 12, left: 0, bottom: 38 }}
             >
-              <CartesianGrid stroke="#ffffff07" vertical={false} />
+              <CartesianGrid stroke="#1e252e" vertical={false} />
               <XAxis
                 dataKey="hero"
                 interval={0}
-                tick={{ fontSize: 8, fill: "#8694a3" }}
+                tick={{ fontSize: 9, fill: "#8c929c" }}
                 angle={-25}
                 textAnchor="end"
                 tickMargin={4}
-                stroke="#36424e"
+                stroke="#262c33"
               />
               <YAxis
-                width={38}
+                width={34}
                 domain={[-100, 100]}
-                tick={{ fontSize: 9, fill: "#6c7c8b" }}
+                tick={{ fontSize: 9, fill: "#8c929c" }}
                 stroke="transparent"
                 tickLine={false}
               />
@@ -165,17 +162,17 @@ export function MatchCharts({ match: m }: { match: Match }) {
                 allowEscapeViewBox={{ x: false, y: false }}
                 cursor={{ fill: "#ffffff05" }}
               />
-              <ReferenceLine y={0} stroke="#4d5a68" />
+              <ReferenceLine y={0} stroke="#38414d" />
               <Bar
                 dataKey="score"
-                name="Импакт"
-                radius={[3, 3, 0, 0]}
-                maxBarSize={35}
+                name="IMP"
+                radius={[2, 2, 0, 0]}
+                maxBarSize={30}
               >
                 {m.players.map((p, i) => (
                   <Cell
                     key={i}
-                    fill={impactScore(p) >= 0 ? "#60bb98" : "#cd7185"}
+                    fill={impactScore(p) >= 0 ? "#61c6a0" : "#e77c8e"}
                   />
                 ))}
               </Bar>
@@ -183,6 +180,6 @@ export function MatchCharts({ match: m }: { match: Match }) {
           </ResponsiveContainer>
         </div>
       </section>
-    </>
+    </div>
   );
 }

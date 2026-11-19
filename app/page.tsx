@@ -1,270 +1,237 @@
 import Link from "next/link";
 import {
-  ArrowRight,
-  ArrowUpRight,
   Activity,
-  BrainCircuit,
-  ChartNoAxesCombined,
-  Check,
-  ChevronRight,
-  Crosshair,
-  Flame,
-  ScanLine,
-  ShieldCheck,
-  Sparkles,
+  ArrowRight,
+  Clock3,
+  Shield,
   Swords,
-  Target,
+  Terminal,
   Trophy,
-  Zap,
 } from "lucide-react";
-import { SearchBox } from "@/components/search";
+import { demoMatch } from "@/lib/demo";
+import { heroName, number, roles, time } from "@/lib/format";
+import { analyzeImpact } from "@/lib/impact-analyzer";
 import { SteamIcon } from "@/components/header";
-import { HeroPortrait, ImpactBar } from "@/components/ui";
-export default async function Home({
-  searchParams,
-}: {
-  searchParams: Promise<{ authError?: string }>;
-}) {
-  const { authError } = await searchParams;
+import { SearchBox } from "@/components/search";
+import { HeroPortrait, ImpactBar, ItemIcon } from "@/components/ui";
+
+const PROS = [
+  {
+    name: "Yatoro",
+    team: "Team Spirit",
+    role: "Керри (Pos 1)",
+    hero: 44,
+    id: 321580662,
+  },
+  {
+    name: "Collapse",
+    team: "Team Spirit",
+    role: "Оффлейн (Pos 3)",
+    hero: 97,
+    id: 302214028,
+  },
+  {
+    name: "Miracle-",
+    team: "Nigma Galaxy",
+    role: "Мид / Керри",
+    hero: 74,
+    id: 105248644,
+  },
+];
+
+export default function HomePage() {
+  const m = demoMatch();
+  const impacts = analyzeImpact(m);
+  const winners = m.players.filter(
+    (p) => (p.team === "radiant") === m.radiantWin,
+  );
+  const mvp = [...winners].sort(
+    (a, b) => impacts.get(b)!.score - impacts.get(a)!.score,
+  )[0];
+
   return (
     <div className="home-shell">
-      {authError && (
-        <div className="notice error" role="alert">
-          {authError === "config"
-            ? "Для входа через Steam настройте JWT_SECRET (минимум 32 символа) и адрес NEXT_PUBLIC_APP_URL в .env.local."
-            : "Steam не подтвердил вход. Попробуйте войти снова."}
-        </div>
-      )}
-      <section className="hero-section">
-        <div className="hero-copy">
-          <div className="eyebrow">
-            <span className="status-dot" /> ТВОЙ СЛЕДУЮЩИЙ УРОВЕНЬ В DOTA 2
+      <section className="tracker-top">
+        <div className="tracker-bar">
+          <div>
+            <h1 className="tracker-title">
+              Трекер матчей и телеметрия <span>Dota 2</span>
+            </h1>
+            <p className="tracker-sub">
+              STRATZ + OpenDota API · Лайнинг 10/20м, тайминги предметов, IMP и
+              разбор по 10 героям
+            </p>
           </div>
-          <h1>
-            За цифрами —<br />
-            причина <span>победы.</span>
-          </h1>
-          <p>
-            Узнай, кто действительно затащил.
-            <br />
-            Найди свои ошибки. Стань сильнее с AI-тренером.
-          </p>
-          <div className="hero-buttons">
+          <div className="tracker-actions">
             <a className="button button-gold" href="/api/auth/steam">
-              <SteamIcon /> Войти через Steam <ArrowUpRight size={17} />
+              <SteamIcon /> Войти через Steam
             </a>
             <Link className="button button-ghost" href="/match/demo">
-              Посмотреть демо <ArrowRight size={17} />
+              Открыть разбор <ArrowRight size={14} />
             </Link>
           </div>
-          <div className="hero-trust">
-            <span>
-              <Check size={13} /> Бесплатная аналитика
-            </span>
-            <span>
-              <ShieldCheck size={13} /> Безопасный вход
-            </span>
-          </div>
         </div>
-        <div className="hero-visual" aria-label="Пример анализа матча">
-          <img
-            src="/phantom-assassin.jpg"
-            alt="Phantom Assassin из Dota 2"
-            className="hero-art"
-          />
-          <div className="visual-grid" />
-          <span className="scan-corner tl" />
-          <span className="scan-corner br" />
-          <div className="visual-label">
-            <ScanLine size={15} /> MATCH INTELLIGENCE <span>V.01</span>
-          </div>
-          <div className="hero-floating">
-            <div className="flex items-center gap-2 text-xs muted">
-              <span className="status-dot" /> АНАЛИЗ ЗАВЕРШЕН{" "}
-              <span className="ml-auto text-[10px] dim">ДЕМО</span>
-            </div>
-            <div className="floating-player">
-              <HeroPortrait id={44} />
-              <div>
-                <b>Phantom Assassin</b>
-                <span>Керри · Легкая линия</span>
+
+        <SearchBox />
+
+        <div className="pro-grid">
+          {PROS.map((p) => (
+            <Link
+              key={p.id}
+              href={`/player/${p.id}`}
+              className="pro-card"
+            >
+              <HeroPortrait id={p.hero} />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-2">
+                  <b className="truncate">{p.name}</b>
+                  <span className="tabular-nums dim text-[10px]">#{p.id}</span>
+                </div>
+                <small className="truncate">
+                  {p.team} · {p.role}
+                </small>
               </div>
-              <span className="mvp-tag">
-                <Trophy size={12} /> MVP
-              </span>
-            </div>
-            <div className="floating-stats">
-              <div>
-                <small>K / D / A</small>
-                <b>
-                  18 <i>/</i> 3 <i>/</i> 12
-                </b>
-              </div>
-              <div>
-                <small>GPM</small>
-                <b>782</b>
-              </div>
-              <div>
-                <small>IMPACT SCORE</small>
-                <b className="text-emerald-400">
-                  +42 <Activity size={15} />
-                </b>
-              </div>
-            </div>
-            <div className="floating-bottom">
-              <Sparkles size={14} />
-              <span>Твой вклад — больше, чем KDA.</span>
-              <ArrowUpRight size={15} />
-            </div>
-          </div>
-          <div className="art-caption">
-            <span>ДАННЫЕ. КОНТЕКСТ. ПРЕИМУЩЕСТВО.</span>
-            <span>01 — 05</span>
-          </div>
+              <ArrowRight size={13} className="dim shrink-0" />
+            </Link>
+          ))}
         </div>
       </section>
-      <SearchBox />
-      <div className="pro-players">
-        <span>Попробуй на профи</span>
-        {[
-          { name: "Yatoro", id: 321580662, hero: 44, team: "Team Spirit" },
-          { name: "Collapse", id: 302214028, hero: 129, team: "Team Spirit" },
-          { name: "Miracle-", id: 105248644, hero: 74, team: "Nigma Galaxy" },
-        ].map((p) => (
-          <Link key={p.id} href={`/player/${p.id}`}>
-            <HeroPortrait id={p.hero} />
-            <b>{p.name}</b>
-            <span>{p.team}</span>
-            <ArrowUpRight size={13} />
-          </Link>
-        ))}
-      </div>
-      <section className="features-section" id="features">
+
+      <section className="preview-section">
         <div className="section-heading">
-          <div>
-            <div className="eyebrow subtle">ПОНИМАЙ ИГРУ ГЛУБЖЕ</div>
-            <h2>
-              Не просто статистика. <span>Понимание игры.</span>
-            </h2>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h2>Превью разбора матча</h2>
+            <span className="tag gold tabular-nums">
+              {m.mode} · {m.rank}
+            </span>
           </div>
-          <span className="small-label">
-            Всё, что нужно для следующей победы <ArrowRight size={15} />
-          </span>
+          <div className="flex items-center gap-3">
+            <Link className="text-link" href="/match/demo#coach">
+              <Terminal size={13} /> AI-разбор матча
+            </Link>
+            <Link className="text-link" href="/match/demo">
+              Полный отчёт <ArrowRight size={13} />
+            </Link>
+          </div>
         </div>
-        <div className="feature-grid">
-          <Link href="/match/demo#impact" className="feature-card">
-            <span className="feature-icon green">
-              <Crosshair size={23} />
+
+        <div className="preview-summary">
+          <div className="preview-score tabular-nums">
+            <span className="green font-semibold">Radiant</span>
+            <b className="green">{m.radiantScore}</b>
+            <span className="dim">:</span>
+            <b className="red">{m.direScore}</b>
+            <span className="red font-semibold">Dire</span>
+            <span className="preview-meta">
+              <Clock3 size={12} /> {time(m.duration)}
             </span>
-            <span className="feature-num">01</span>
-            <h3>Настоящий импакт</h3>
-            <p>
-              KDA не расскажет всю историю.
-              <br />
-              Узнай, кто сделал разницу в матче.
-            </p>
-            <div className="feature-sample">
-              <span className="tag gold">
-                <Trophy size={11} /> MVP матча
-              </span>
-              <span className="tag red">
-                <Flame size={11} /> Ruiner Alert
+            <span className="preview-meta">
+              <Shield size={12} /> Победа {m.radiantWin ? "Radiant" : "Dire"}
+            </span>
+          </div>
+          {mvp && (
+            <div className="preview-mvp tabular-nums">
+              <Trophy size={13} className="gold" />
+              <span className="dim">MVP:</span>
+              <b>{mvp.name}</b>
+              <span className="muted">({heroName(mvp.heroId)})</span>
+              <span className="gold font-semibold">
+                +{impacts.get(mvp)!.score} IMP
               </span>
             </div>
-            <ArrowUpRight className="feature-arrow" size={18} />
-          </Link>
-          <Link href="/match/demo#teams" className="feature-card">
-            <span className="feature-icon gold">
-              <ChartNoAxesCombined size={23} />
-            </span>
-            <span className="feature-num">02</span>
-            <h3>Каждая минута на счету</h3>
-            <p>
-              Лайнинг, экономика и тайминги билдов.
-              <br />
-              Найди момент, когда всё изменилось.
-            </p>
-            <div className="mini-timeline">
-              <span>
-                13:20 <b>Battle Fury</b>
-              </span>
-              <i />
-              <span>
-                22:10 <b>BKB</b>
-              </span>
-            </div>
-            <ArrowUpRight className="feature-arrow" size={18} />
-          </Link>
-          <Link href="/match/demo#coach" className="feature-card ai-feature">
-            <span className="feature-icon purple">
-              <BrainCircuit size={23} />
-            </span>
-            <span className="feature-num">03</span>
-            <h3>Твой персональный AI-тренер</h3>
-            <p>
-              Причины поражения и конкретные советы.
-              <br />
-              По фактам твоего матча, без воды.
-            </p>
-            <div className="ai-sample">
-              <Sparkles size={14} /> Меньше тильта. Больше прогресса.
-            </div>
-            <ArrowUpRight className="feature-arrow" size={18} />
-          </Link>
+          )}
+        </div>
+
+        <div className="table-scroll">
+          <table className="min-w-[880px] tabular-nums">
+            <thead>
+              <tr>
+                <th className="px-3">КОМАНДА / ИГРОК</th>
+                <th className="px-3">РОЛЬ / ЛАЙН</th>
+                <th className="px-3">K / D / A</th>
+                <th className="px-3">LH / DN</th>
+                <th className="px-3">GPM / XPM</th>
+                <th className="px-3">НЕТВОРС</th>
+                <th className="px-3">УРОН / ВЫШКИ</th>
+                <th className="px-3">IMP</th>
+                <th className="px-3">ПРЕДМЕТЫ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {m.players.map((p, i) => {
+                const imp = impacts.get(p)!;
+                return (
+                  <tr key={i}>
+                    <td className="px-3">
+                      <div className="player-cell">
+                        <span
+                          className={`team-pill ${p.team === "radiant" ? "green" : "red"}`}
+                        >
+                          {p.team === "radiant" ? "R" : "D"}
+                        </span>
+                        <HeroPortrait id={p.heroId} className="shrink-0" />
+                        <div className="min-w-0">
+                          <Link
+                            href={`/player/${p.accountId ?? "demo"}`}
+                            className="account-link block truncate"
+                          >
+                            <b>{p.name}</b>
+                          </Link>
+                          <small className="truncate">{heroName(p.heroId)}</small>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-3">
+                      {p.role ? roles[p.role] : "—"}
+                      <small className="block dim mt-0.5">
+                        {p.lane ?? "—"}
+                      </small>
+                    </td>
+                    <td className="px-3 text-white">
+                      {p.kills} <span className="dim">/</span>{" "}
+                      <span className="red">{p.deaths}</span>{" "}
+                      <span className="dim">/</span> {p.assists}
+                    </td>
+                    <td className="px-3">
+                      {p.lastHits} <span className="dim">/ {p.denies}</span>
+                    </td>
+                    <td className="px-3">
+                      {p.gpm} <span className="dim">/ {p.xpm}</span>
+                    </td>
+                    <td className="px-3 gold">{number(p.networth)}</td>
+                    <td className="px-3">
+                      {number(p.heroDamage)}{" "}
+                      <span className="dim">/ {number(p.towerDamage)}</span>
+                    </td>
+                    <td className="px-3">
+                      <div className="flex items-center gap-2">
+                        <ImpactBar score={imp.score} estimated={imp.estimated} />
+                        <span className={`tag ${imp.tone}`}>{imp.badge}</span>
+                      </div>
+                    </td>
+                    <td className="px-3">
+                      <div className="items">
+                        {p.items.slice(0, 4).map((item, idx) => (
+                          <ItemIcon id={item} key={idx} />
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </section>
-      <section className="demo-section">
-        <div className="section-heading">
-          <div>
-            <div className="eyebrow subtle">ОТКРОЙ И ПОСМОТРИ</div>
-            <h2>
-              Весь матч. <span>В одном разборе.</span>
-            </h2>
-          </div>
-          <Link href="/match/demo" className="text-link">
-            Открыть демоматч <ArrowUpRight size={16} />
-          </Link>
-        </div>
-        <Link href="/match/demo" className="demo-match">
-          <div className="demo-match-title">
-            <span className="match-icon">
-              <Swords size={21} />
-            </span>
-            <div>
-              <b>
-                Radiant <span className="text-emerald-400">40</span>
-                <span className="dim">:</span>
-                <span className="text-rose-400">25</span> Dire
-              </b>
-              <p>
-                All Pick <span>·</span> 40:18 <span>·</span> Титан{" "}
-                <span className="demo-chip">ДЕМО</span>
-              </p>
-            </div>
-          </div>
-          <div className="demo-team">
-            {[44, 74, 129, 26, 5].map((id) => (
-              <HeroPortrait id={id} key={id} />
-            ))}
-            <span>VS</span>
-            {[1, 13, 2, 86, 66].map((id) => (
-              <HeroPortrait id={id} key={id} />
-            ))}
-          </div>
-          <div className="demo-winner">
-            <span className="status-dot" /> Победа Radiant{" "}
-            <ChevronRight size={18} />
-          </div>
-        </Link>
-      </section>
+
       <div className="home-bottom">
-        <ShieldCheck size={17} />
+        <Activity size={13} />
         <span>
-          Вход через официальный Steam OpenID. Мы не получаем доступ к твоему
-          паролю и инвентарю.
+          Открытая история матчей: Настройки → Сообщество → «Общедоступная
+          история матчей» (Expose Public Match Data).
         </span>
-        <span className="ml-auto flex items-center gap-2">
-          <span className="status-dot" /> Готов к игре
+        <span className="ml-auto flex items-center gap-1.5">
+          <Swords size={12} /> STRATZ GraphQL + OpenDota REST
         </span>
       </div>
     </div>
